@@ -1,0 +1,255 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-error: var(--error);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-cycle: var(--cycle);
+  --color-recap: var(--recap);
+  --color-break: var(--break);
+  --color-hos-DS_OFF: var(--hos-DS_OFF);
+  --color-hos-DS_ON: var(--hos-DS_ON);
+  --color-hos-DS_D: var(--hos-DS_D);
+  --color-hos-DS_SB: var(--hos-DS_SB);
+  --color-hos-DR_IND_PC: var(--hos-DR_IND_PC);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+
+  /* =========================
+   DUTY STATUSES (PRIMARY)
+   ========================= */
+
+  --hos-DS_OFF-bg: oklch(0.52 0.22 25);
+  --hos-DS_OFF-fg: oklch(0.95 0.02 25);
+
+  --hos-DS_ON-bg: oklch(0.84 0.17 100);
+  --hos-DS_ON-fg: oklch(0.22 0.03 100);
+
+  --hos-DS_D-bg: oklch(0.5 0.18 145);
+  --hos-DS_D-fg: oklch(0.95 0.02 145);
+
+  --hos-DS_SB-bg: oklch(0.22 0.02 260);
+  --hos-DS_SB-fg: oklch(0.9 0.01 260);
+
+  /* =========================
+   WAITING TIME
+   ========================= */
+
+  --hos-DS_WT-bg: oklch(0.62 0.14 45);
+  --hos-DS_WT-fg: oklch(0.98 0.01 45);
+
+  /* =========================
+   SPECIAL DRIVING MODES
+   ========================= */
+
+  --hos-DR_IND_PC-bg: oklch(0.58 0.18 300);
+  --hos-DR_IND_PC-fg: oklch(0.95 0.02 300);
+
+  --hos-DR_IND_YM-bg: oklch(0.56 0.15 165);
+  --hos-DR_IND_YM-fg: oklch(0.95 0.02 165);
+
+  /* =========================
+   LOGIN / LOGOUT (SOFT)
+   ========================= */
+
+  --hos-DR_LOGIN-bg: oklch(0.72 0.08 220);
+  --hos-DR_LOGIN-fg: oklch(0.98 0.01 220);
+
+  --hos-DR_LOGOUT-bg: oklch(0.55 0.02 240);
+  --hos-DR_LOGOUT-fg: oklch(0.95 0.01 240);
+
+  /* =========================
+   MALFUNCTIONS
+   ========================= */
+
+  --hos-MALF_LOGGED-bg: oklch(0.52 0.18 25);
+  --hos-MALF_LOGGED-fg: oklch(0.98 0.01 25);
+
+  --hos-MALF_CLEARED-bg: oklch(0.72 0.08 25);
+  --hos-MALF_CLEARED-fg: oklch(0.15 0.02 25);
+
+  /* =========================
+   DIAGNOSTICS
+   ========================= */
+
+  --hos-DIAG_LOGGED-bg: oklch(0.6 0.16 80);
+  --hos-DIAG_LOGGED-fg: oklch(0.98 0.01 80);
+
+  --hos-DIAG_CLEARED-bg: oklch(0.78 0.08 80);
+  --hos-DIAG_CLEARED-fg: oklch(0.15 0.02 80);
+
+  /* =========================
+   INTERMEDIATE LOGS
+   ========================= */
+
+  --hos-LOG_NORMAL_PRECISION-bg: oklch(0.52 0.16 145);
+  --hos-LOG_NORMAL_PRECISION-fg: oklch(0.95 0.02 145);
+
+  --hos-LOG_REDUCED_PRECISION-bg: oklch(0.48 0.1 235);
+  --hos-LOG_REDUCED_PRECISION-fg: oklch(0.95 0.02 235);
+
+  /* =========================
+   ENGINE (SOFTER THAN DRIVING)
+   ========================= */
+
+  --hos-ENG_UP_NORMAL-bg: oklch(0.62 0.1 135);
+  --hos-ENG_UP_NORMAL-fg: oklch(0.98 0.01 135);
+
+  --hos-ENG_UP_REDUCED-bg: oklch(0.74 0.06 135);
+  --hos-ENG_UP_REDUCED-fg: oklch(0.15 0.02 135);
+
+  --hos-ENG_DOWN_NORMAL-bg: oklch(0.45 0.02 255);
+  --hos-ENG_DOWN_NORMAL-fg: oklch(0.95 0.01 255);
+
+  --hos-ENG_DOWN_REDUCED-bg: oklch(0.6 0.02 255);
+  --hos-ENG_DOWN_REDUCED-fg: oklch(0.95 0.01 255);
+
+  /* =========================
+   CERTIFICATIONS
+   ========================= */
+
+  --hos-DR_CERT-bg: oklch(0.58 0.16 270);
+  --hos-DR_CERT-fg: oklch(0.95 0.02 270);
+
+  --cycle: oklch(0.62 0.16 245);
+  --recap: oklch(50.951% 0.2407 305.907);
+  --break: oklch(82.279% 0.16094 76.719);
+
+  --error: oklch(0.68 0.22 25);
+  --success: oklch(0.62 0.18 145);
+  --warning: oklch(87.3% 0.17854 92.233);
+
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+
+  --hos-DS_OFF: oklch(0.7 0.02 260);
+  --hos-DS_ON: oklch(0.75 0.12 240);
+  --hos-DS_D: oklch(0.72 0.18 145);
+  --hos-DS_SB: oklch(0.68 0.14 310);
+
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
