@@ -10,7 +10,11 @@ export const Route = createFileRoute("/")({
 export type DriverTableData = {
   id: string;
   name: string;
-  vehicle: string;
+  vehicle: {
+    id: string;
+    name: string;
+    vin: string;
+  };
   status: string;
   location: string;
   breakTime: TimeBlock;

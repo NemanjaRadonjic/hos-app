@@ -10,7 +10,7 @@ const RootComponent = () => {
 
   return (
     <div className="flex h-screen flex-col">
-      <Navbar />
+      {/* <Navbar /> */}
       <main className="min-h-0 flex-1 overflow-auto">
         <Outlet />
       </main>

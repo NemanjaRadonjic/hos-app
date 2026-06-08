@@ -1,6 +1,4 @@
-import { DateTime } from "luxon";
 import api from "./axios";
-import { TZ_MAP } from "./maps";
 import type { DailyLog, DailyLogSummary, HosEvent } from "./types";
 
 export const getUsers = async () => {
@@ -158,5 +156,10 @@ export const upsertHosEvent = async (id: string, payload: HosEvent) => {
       "$client[useServerAuditTime]": true,
     },
   });
+  return data;
+};
+
+export const deleteHosEvent = async (id: string) => {
+  const { data } = await api.delete(`/hos_events/${id}`);
   return data;
 };

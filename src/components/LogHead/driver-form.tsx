@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { ShippingForm } from "./shipping-form";
 import { useState } from "react";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
+import checkCert from "@/lib/helpers/check-cert";
 
 type DriverFormProps = {};
 
@@ -23,9 +24,14 @@ export default function DriverForm({
   selectedDay,
 }: DriverFormProps) {
   const [open, setOpen] = useState(false);
-  const { updateDailyLog, getDailyLog } = useTransactionContext();
+  const { events, updateDailyLog, getDailyLog } = useTransactionContext();
   const dailyLog = getDailyLog(selectedDay.toFormat("yyyy/MM/dd"));
   const form = dailyLog?.form;
+  const isSigned = checkCert(
+    events,
+    selectedDay.toFormat("yyyy/MM/dd"),
+    !!form?.signature && currentDailySummary?.isSigned,
+  );
   return (
     <div className="flex flex-1 gap-4">
       <div className="flex items-center gap-2">
@@ -55,9 +61,9 @@ export default function DriverForm({
           <div className="flex items-start gap-2">
             <div className="flex flex-wrap gap-1">
               {form?.trailers?.length ? (
-                form?.trailers?.map((trailer) => (
+                form?.trailers?.map((trailer, i) => (
                   <Badge
-                    key={trailer}
+                    key={`${trailer}-${i}`}
                     className="flex items-center text-[14px]"
                     variant="secondary"
                   >
@@ -79,9 +85,9 @@ export default function DriverForm({
           <div className="flex items-start gap-2">
             <div className="flex flex-wrap gap-1">
               {form?.shippingDocuments?.length ? (
-                form?.shippingDocuments?.map((doc) => (
+                form?.shippingDocuments?.map((doc, i) => (
                   <Badge
-                    key={doc}
+                    key={`${doc}-${i}`}
                     className="flex items-center text-[14px]"
                     variant="outline"
                   >
@@ -103,9 +109,8 @@ export default function DriverForm({
         </div>
       </div>
       <div className="flex flex-1 justify-center gap-4">
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center justify-center gap-3">
           <div>
-            {/* {currentDailySummary?.hasForms ? ( */}
             {form ? (
               <Badge variant="success">
                 <TbClipboardCheckFilled /> Forms
@@ -116,41 +121,17 @@ export default function DriverForm({
               </Badge>
             )}
           </div>
-          <div>
-            {currentDailySummary?.violations.length ? (
-              <Badge variant="error">
-                <FaExclamationTriangle className="text-red-500" /> Violations
-              </Badge>
-            ) : (
-              <Badge variant="success">
-                <FaExclamationTriangle /> No violations
-              </Badge>
-            )}
-          </div>
         </div>
-        <div className="flex flex-col items-center gap-3">
-          <div>
-            {form?.signature ? (
-              <Badge variant="success">
-                <FaFileSignature /> Signature
-              </Badge>
-            ) : (
-              <Badge variant="error">
-                <FaFileCircleXmark /> No signature
-              </Badge>
-            )}
-          </div>
-          <div>
-            {currentDailySummary?.isSigned ? (
-              <Badge variant="success" size="lg">
-                <BiSolidCertification /> Signed
-              </Badge>
-            ) : (
-              <Badge variant="error" size="lg">
-                <BiSolidCertification /> Not signed
-              </Badge>
-            )}
-          </div>
+        <div className="flex flex-col items-center justify-center gap-3">
+          {!isSigned.error ? (
+            <Badge variant="success">
+              <BiSolidCertification /> Signed
+            </Badge>
+          ) : (
+            <Badge variant="error">
+              <BiSolidCertification /> {isSigned.error}
+            </Badge>
+          )}
         </div>
       </div>
     </div>

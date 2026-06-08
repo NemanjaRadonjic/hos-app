@@ -11,18 +11,34 @@ import {
 import { TZ_MAP } from "@/lib/maps";
 import ELDGraph from "@/components/Graph";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import LogHead from "@/components/LogHead";
-import LogEvent from "@/components/log-event";
+import LogEvent from "@/components/LogEvent";
 import type { HosEvent } from "@/lib/types";
 import ControlBar from "@/components/control-bar";
-import { checkViolations } from "@/lib/hos/calculations";
-import { getHosTimers } from "@/lib/hos/calculations";
+import { hosEngine } from "@/lib/hos/calculations";
+
 import { useDriverData } from "@/lib/hooks/useDriverData";
 import { isDutyEvent } from "@/lib/hos/helpers";
 import { useTransaction } from "@/lib/hooks/useTransaction";
-import { TransactionContext } from "@/lib/hooks/TransactionContext";
+import {
+  TransactionContext,
+  useTransactionContext,
+} from "@/lib/hooks/TransactionContext";
+import { EditEventModal } from "@/components/LogEvent/edit-form";
+import checkCert from "@/lib/helpers/check-cert";
+
+export type EventInfo = {
+  duration: number | null;
+  odoDelta: number | null;
+  engHoursDelta: number | null;
+};
+
+type EnrichedEvent = {
+  event: HosEvent;
+  info: EventInfo;
+};
 
 export const Route = createFileRoute("/drivers/$driverId")({
   component: DriverPage,
@@ -44,16 +60,24 @@ function DriverPage() {
   const [sliderSelection, setSliderSelection] = useState({ start: 0, end: 0 });
   const [sliderActive, setSliderActive] = useState(false);
   const [selectedDay, setSelectedDay] = useState(DateTime.now());
-
+  // const [editOpen, setEditOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<HosEvent | null>(null);
   const transaction = useTransaction(driverId, selectedDay);
 
-  const { status, events, lastKnownEvent, setEvents } = transaction;
-
-  console.log({ events });
+  const {
+    status,
+    events,
+    lastKnownEvent,
+    updateEventsTimestamp,
+    setDailyLogEdits,
+  } = transaction;
 
   const { driver } = useDriverData(driverId);
 
-  const hosTimers = getHosTimers(events); // ← after events is defined
+  // const hosTimers = useMemo(() => getHosTimers(events), [events]);
+
+  const { clocks, violations } = hosEngine(events);
+  console.log({ clocks, violations });
 
   const toggleSelectedId = (id: string) => {
     setSelectedIds((prev) => {
@@ -63,26 +87,11 @@ function DriverPage() {
     });
   };
 
-  const lastClickedId = useRef<string | null>(null);
+  useEffect(() => {
+    setSelectedDay(DateTime.now());
+  }, [driverId]);
 
-  const handleEventClick = (id: string, e: React.MouseEvent) => {
-    if (e.shiftKey && lastClickedId.current) {
-      const clickedIdx = eventList.findIndex((ev) => ev._id === id);
-      const lastIdx = eventList.findIndex(
-        (ev) => ev._id === lastClickedId.current,
-      );
-      const start = Math.min(clickedIdx, lastIdx);
-      const end = Math.max(clickedIdx, lastIdx);
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        eventList.slice(start, end + 1).forEach((ev) => next.add(ev._id));
-        return next;
-      });
-    } else {
-      toggleSelectedId(id);
-      lastClickedId.current = id;
-    }
-  };
+  const lastClickedId = useRef<string | null>(null);
 
   const currentDayEvents = events.filter((event) => {
     const eventDay = DateTime.fromMillis(event.eventTime.timestamp).setZone(tz);
@@ -96,7 +105,6 @@ function DriverPage() {
     firstOdometer != null && lastOdometer != null
       ? lastOdometer - firstOdometer
       : 0;
-  console.log({ transaction });
   const lastStatusBeforeSelected =
     [...events]
       .filter((event) => {
@@ -113,14 +121,36 @@ function DriverPage() {
   const eventList = [lastStatusBeforeSelected, ...currentDayEvents].filter(
     (e): e is HosEvent => Boolean(e),
   );
-
-  const vehicles = [
-    ...new Map(
-      eventList.filter((e) => e.vehicle).map((e) => [e.vehicle.id, e.vehicle]),
-    ).values(),
-  ];
-
-  console.log({ eventList });
+  const handleEventClick = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      if (e.shiftKey && lastClickedId.current) {
+        const clickedIdx = eventList.findIndex((ev) => ev._id === id);
+        const lastIdx = eventList.findIndex(
+          (ev) => ev._id === lastClickedId.current,
+        );
+        const start = Math.min(clickedIdx, lastIdx);
+        const end = Math.max(clickedIdx, lastIdx);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          eventList.slice(start, end + 1).forEach((ev) => next.add(ev._id));
+          return next;
+        });
+      } else {
+        toggleSelectedId(id);
+        lastClickedId.current = id;
+      }
+    },
+    [eventList],
+  );
+  const vehicles = useMemo(() => {
+    return [
+      ...new Map(
+        eventList
+          .filter((e) => e.vehicle)
+          .map((e) => [e.vehicle.id, e.vehicle]),
+      ).values(),
+    ];
+  }, [eventList]);
 
   useEffect(() => {
     if (!sliderActive) return;
@@ -138,32 +168,6 @@ function DriverPage() {
     );
     setSelectedIds(ids);
   }, [sliderSelection, sliderActive]);
-
-  const applyTimeDelta = (deltaMs: number) => {
-    setEvents((prev) =>
-      prev.map((e) => {
-        if (!selectedIds.has(e._id)) return e;
-
-        const newTimestamp = e.eventTime.timestamp + deltaMs;
-
-        const newDate = DateTime.fromMillis(newTimestamp, {
-          zone: "America/Chicago", // or derive from e.eventTime.logDate.timeZone.id
-        }).toFormat("yyyy/MM/dd");
-
-        return {
-          ...e,
-          eventTime: {
-            ...e.eventTime,
-            timestamp: newTimestamp,
-            logDate: {
-              ...e.eventTime.logDate,
-              date: newDate,
-            },
-          },
-        };
-      }),
-    );
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -191,15 +195,14 @@ function DriverPage() {
     return lastMs - firstMs;
   }, [selectedIds, events]);
 
-  const violations = checkViolations(events);
+  // const violations = useMemo(() => checkViolations(events), [events]);
 
-  const enrichedEventList = useMemo(() => {
+  const enrichedEventList: EnrichedEvent[] = useMemo(() => {
     return eventList.map((event, i) => {
       const isDutyStatus = ["DS_ON", "DS_OFF", "DS_D", "DS_SB"].includes(
         event.eventCode.id,
       );
 
-      // find next duty status event, skipping intermediates
       const nextDutyEvent = isDutyStatus
         ? eventList
             .slice(i + 1)
@@ -225,7 +228,14 @@ function DriverPage() {
           ? event.totalEngineHours - prev.totalEngineHours
           : null;
 
-      return { ...event, duration, odoDelta, engHoursDelta };
+      return {
+        event,
+        info: {
+          duration,
+          odoDelta,
+          engHoursDelta,
+        },
+      };
     });
   }, [eventList]);
 
@@ -237,10 +247,11 @@ function DriverPage() {
         <LogHead
           value={selectedDay}
           onChange={setSelectedDay}
-          hosTimers={hosTimers}
+          hosTimers={clocks}
           selectedDay={selectedDay}
           totalMiles={totalMiles}
           vehicles={vehicles}
+          violations={violations}
         />
         <ELDGraph
           selectedDay={selectedDay}
@@ -287,14 +298,16 @@ function DriverPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {enrichedEventList.map((event) => (
+                {enrichedEventList.map(({ event, info }) => (
                   <LogEvent
                     key={event._id}
                     event={event}
+                    eventInfo={info}
                     checked={selectedIds.has(event._id)}
                     onCheckboxClick={(e) => handleEventClick(event._id, e)}
                     focused={focusedId === event._id}
                     setFocusedId={setFocusedId}
+                    setEditingEvent={setEditingEvent}
                   />
                 ))}
                 {enrichedEventList.length === 0 && (
@@ -312,15 +325,22 @@ function DriverPage() {
           </div>
           <ControlBar
             selectedIds={selectedIds}
-            reset={() => {
+            resetSelection={() => {
               setSelectedIds(new Set());
               setSliderActive(false);
             }}
-            onApply={applyTimeDelta}
+            updateEventsTimestamp={updateEventsTimestamp}
             selectDuration={selectDuration}
             transactionStatus={status}
           />
         </div>
+        <EditEventModal
+          event={editingEvent}
+          open={!!editingEvent}
+          onOpenChange={(open) => {
+            if (!open) setEditingEvent(null);
+          }}
+        />
       </TransactionContext.Provider>
     </div>
   );

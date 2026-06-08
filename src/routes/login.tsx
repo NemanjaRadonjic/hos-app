@@ -26,7 +26,7 @@ function LoginPage() {
       return;
     }
 
-    const { data, error1 } =
+    const { data, error: error1 } =
       await supabase.functions.invoke("get-apexhos-token");
     localStorage.setItem("apex_token", data.accessToken);
     console.log({ data, error1 });

@@ -25,14 +25,14 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
   const [shippingDocs, setShippingDocs] = useState<string[]>(
     dailyLog?.form.shippingDocuments || [],
   );
-  const [signature, setSignature] = useState<string>(
-    dailyLog?.form.signature || "",
+  const [signature, setSignature] = useState<string | undefined>(
+    dailyLog?.form.signature || undefined,
   );
   const [pendingCoDriverId, setPendingCoDriverId] = useState(
     dailyLog?.form.coDriver?.id,
   );
   const [pendingCoDriver, setPendingCoDriver] = useState(
-    dailyLog?.form.coDriver ?? null,
+    dailyLog?.form.coDriver ?? undefined,
   );
 
   const dailyLogID =
@@ -40,17 +40,19 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
 
   const onSubmit = () => {
     updateDailyLog(dailyLogID, {
-      form: {
-        ...dailyLog?.form,
-        trailers,
-        shippingDocuments: shippingDocs,
-        ...(signature && { signature }),
-        ...(pendingCoDriver && { coDriver: pendingCoDriver }),
-      },
+      trailers,
+      shippingDocuments: shippingDocs,
+      ...(signature && { signature }),
+      ...(pendingCoDriver && { coDriver: pendingCoDriver }),
+    });
+    console.log({
+      trailers,
+      shippingDocuments: shippingDocs,
+      ...(signature && { signature }),
+      ...(pendingCoDriver && { coDriver: pendingCoDriver }),
     });
     closeDialog();
   };
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
@@ -61,7 +63,6 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
           onSelect={(id) => {
             const selectedDriver = drivers.find((d) => d.id === id);
             setPendingCoDriverId(id);
-            // store for save, don't call updateDailyLog yet
             setPendingCoDriver(selectedDriver?.dataAsCoDriver);
           }}
         />
@@ -76,7 +77,7 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label>Trailers</Label>
+        <Label>Shipping Documents</Label>
         <TagInput
           value={shippingDocs}
           onChange={setShippingDocs}

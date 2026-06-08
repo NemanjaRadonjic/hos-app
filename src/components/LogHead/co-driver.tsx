@@ -44,7 +44,7 @@ const CoDriver = ({ coDriverId }: CoDriverProps) => {
           {driver?.name}
         </div>
         <div className="flex items-center gap-2">
-          {driver?.vehicle}
+          {driver?.vehicle.name}
           <FaTruckFront />
         </div>
       </div>

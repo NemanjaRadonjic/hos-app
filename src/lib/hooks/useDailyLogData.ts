@@ -41,8 +41,8 @@ export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
     queryKey: ["driverData", userId],
 
     initialPageParam: {
-      from: selectedDay.minus({ days: INITIAL_HISTORY_DAYS }).startOf("day"),
-      to: selectedDay.endOf("day"),
+      from: DateTime.now().minus({ days: INITIAL_HISTORY_DAYS }).startOf("day"),
+      to: DateTime.now().endOf("day"),
     },
 
     select: (data) => ({

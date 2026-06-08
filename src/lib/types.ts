@@ -1,3 +1,5 @@
+import type { Provider } from "react";
+
 export type DriverUser = {
   _id: string;
   _rev: string;
@@ -65,22 +67,80 @@ export type DriverUser = {
   dId: string;
 };
 
+export interface DailyLogForm {
+  trailers: string[];
+
+  vehicles: {
+    id: string;
+    name: string;
+    vin: string;
+  }[];
+
+  shippingDocuments: string[];
+
+  lud: boolean;
+  cl: boolean;
+
+  company: {
+    id: string;
+    name: string;
+
+    state: {
+      id: string;
+    };
+
+    terminals: {
+      id: string;
+      logStartOffset: number;
+
+      street: string;
+      city: string;
+      zipCode: string;
+
+      timeZone: {
+        id: string;
+      };
+
+      state: {
+        id: string;
+      };
+    }[];
+
+    timeZone: {
+      id: string;
+    };
+
+    street: string;
+    city: string;
+    zipCode: string;
+    dotNumber: string;
+  };
+  driver: {
+    id: string;
+
+    email: string;
+    firstName: string;
+    lastName: string;
+
+    avu?: number;
+    driverInfo: DriverInfo;
+  };
+  coDriver?: {
+    id: string;
+
+    email: string;
+    firstName: string;
+    lastName: string;
+
+    avu: number;
+    driverInfo: DriverInfo;
+  };
+  signature?: string;
+}
+
 // checked - this is a DailyLog response shape
-export interface DailyLog {
-  _id: string;
-  _rev: string;
-
-  companyId: string;
-  userId: string;
-
-  createdBy: string;
-  createdAt: number;
-
-  updatedBy: string;
-  updatedAt: number;
-
+export interface DailyLogBase {
   dSTime: number;
-  stime: number;
 
   logDate: {
     date: string;
@@ -92,83 +152,14 @@ export interface DailyLog {
     logStartOffset: number;
   };
 
-  form: {
-    trailers: string[];
-
-    vehicles: {
-      id: string;
-      name: string;
-      vin: string;
-    }[];
-
-    shippingDocuments: string[];
-
-    lud: boolean;
-    cl: boolean;
-
-    company: {
-      id: string;
-      name: string;
-
-      state: {
-        id: string;
-      };
-
-      terminals: {
-        id: string;
-        logStartOffset: number;
-
-        street: string;
-        city: string;
-        zipCode: string;
-
-        timeZone: {
-          id: string;
-        };
-
-        state: {
-          id: string;
-        };
-      }[];
-
-      timeZone: {
-        id: string;
-      };
-
-      street: string;
-      city: string;
-      zipCode: string;
-      dotNumber: string;
-    };
-    driver: {
-      id: string;
-
-      email: string;
-      firstName: string;
-      lastName: string;
-
-      avu?: number;
-      driverInfo: DriverInfo;
-    };
-    coDriver?: {
-      id: string;
-
-      email: string;
-      firstName: string;
-      lastName: string;
-
-      avu: number;
-      driverInfo: DriverInfo;
-    };
-    signature?: string;
-  };
+  form: DailyLogForm;
 
   type: {
     id: string;
   };
 }
 
-export interface DailyLogSummary {
+export interface DailyLog extends DailyLogBase {
   _id: string;
   _rev: string;
 
@@ -180,6 +171,14 @@ export interface DailyLogSummary {
 
   updatedBy: string;
   updatedAt: number;
+
+  stime: number;
+}
+
+export interface DailyLogSummaryBase {
+  _id: string;
+
+  userId: string;
 
   isSigned: boolean;
   hasForms: boolean;
@@ -195,7 +194,7 @@ export interface DailyLogSummary {
     logStartOffset: number;
   };
 
-  violations: unknown[];
+  violations: ProviderViolation[];
   availableExceptions: unknown[];
   appliedExceptions: unknown[];
 
@@ -203,9 +202,19 @@ export interface DailyLogSummary {
     id: string;
   };
 
-  stime: number;
   dSTime: number;
   dId: string;
+}
+
+export interface DailyLogSummary extends DailyLogSummaryBase {
+  _rev: string;
+  companyId: string;
+
+  createdBy: string;
+  createdAt: number;
+  updatedBy: string;
+  updatedAt: number;
+  stime: number;
 }
 
 export interface LatestDriverStatus {
@@ -224,6 +233,7 @@ export interface LatestDriverStatus {
   hosEvent: HosEvent;
   location: Location;
   vehicle: Vehicle;
+  fc?: { id: string }; // malf statuses ?
   ec: boolean;
   recap: RecapEntry[];
   type: { id: string };
@@ -558,3 +568,28 @@ export interface Company {
   it?: boolean;
   r?: { id: string };
 }
+export type ProviderViolation = {
+  startTime: {
+    timestamp: number;
+    logDate: {
+      date: string;
+      timeZone: {
+        id: string;
+      };
+      logStartOffset: number;
+    };
+  };
+  endTime: {
+    timestamp: number;
+    logDate: {
+      date: string;
+      timeZone: {
+        id: string;
+      };
+      logStartOffset: number;
+    };
+  };
+  regulation: {
+    id: string;
+  };
+};

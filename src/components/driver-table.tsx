@@ -21,6 +21,7 @@ import { STATUS_MAP } from "@/lib/maps";
 import { HosGauge } from "./hos-gauge";
 import type { DriverTableData } from "@/routes";
 import "@tanstack/react-table";
+import type { DriverSimplified } from "@/lib/hooks/useDriversData";
 
 declare module "@tanstack/react-table" {
   interface ColumnMeta<TData, TValue> {
@@ -34,7 +35,7 @@ const columns: ColumnDef<DriverTableData>[] = [
     accessorKey: "name",
     header: "Driver",
   },
-  { accessorKey: "vehicle", header: "Vehicle" },
+  { accessorKey: "vehicle.name", header: "Vehicle" },
   {
     accessorKey: "status",
     header: "Status",
@@ -139,7 +140,7 @@ const columns: ColumnDef<DriverTableData>[] = [
   },
 ];
 
-export function DriverTable({ data }: { data: DriverTableData[] }) {
+export function DriverTable({ data }: { data: DriverSimplified[] }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [search, setSearch] = useState("");
 
@@ -149,9 +150,10 @@ export function DriverTable({ data }: { data: DriverTableData[] }) {
     const searchTerm = search.toLowerCase();
 
     return data.filter((driver) => {
+      console.log({ driver });
       return (
         driver.name.toLowerCase().includes(searchTerm) ||
-        driver.vehicle.toLowerCase().includes(searchTerm)
+        driver.vehicle.name.toLowerCase().includes(searchTerm)
       );
     });
   }, [data, search]);

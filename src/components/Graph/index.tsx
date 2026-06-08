@@ -1,6 +1,6 @@
 import { getNoteIcons, timestampToMinutes } from "@/lib/helpers";
 import { DateTime } from "luxon";
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import { ICON_SIZES, mainEventCodes } from "@/lib/maps";
 import { BiSolidCertification, BiLogIn, BiLogOut } from "react-icons/bi";
 import { TbEngine, TbEngineOff } from "react-icons/tb";
@@ -14,6 +14,8 @@ import type { HosEvent } from "@/lib/types";
 import type { IconType } from "react-icons/lib";
 import type { DutyEvent, EventCode } from "./types";
 import { isActiveEvent, isDutyEvent } from "@/lib/hos/helpers";
+import type { Violation } from "@/lib/hos/calculations";
+import drawViolationOverlay from "./drawViolationOverlay";
 
 type ELDGraphProps = {
   selectedDay: DateTime<true> | DateTime<false>;
@@ -33,6 +35,7 @@ type ELDGraphProps = {
   setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   focusedId: string | null;
   setFocusedId: React.Dispatch<React.SetStateAction<string | null>>;
+  violations: Violation[];
 };
 
 const ICON_COLORS: Record<string, string> = {
@@ -109,6 +112,9 @@ export default function ELDGraph({
   const sliderActiveRef = useRef(sliderActive);
   const isSelectedDayToday = selectedDay.hasSame(DateTime.now(), "day");
   const didDrag = useRef(false);
+  const [hoveredViolation, setHoveredViolation] = useState<Violation | null>(
+    null,
+  );
 
   useEffect(() => {
     sliderSelectionRef.current = sliderSelection;
@@ -240,9 +246,12 @@ export default function ELDGraph({
   const dayStart = selectedDay.startOf("day").toMillis();
   const dayEnd = selectedDay.endOf("day").toMillis();
 
-  const currentDayVios = violations.filter(
-    (v) => v.startTs >= dayStart && v.startTs <= dayEnd,
-  );
+  const currentDayVios = violations.filter((v) => {
+    const vStart = v.startTs;
+    const vEnd = v.endTs ?? Date.now();
+
+    return vStart < dayEnd && vEnd > dayStart;
+  });
   console.log({ currentDayVios });
 
   const draw = useCallback(() => {
@@ -293,6 +302,13 @@ export default function ELDGraph({
       mainEvents,
       isSelectedDayToday,
       selectedDay,
+      GRAPH_SIZES,
+    });
+    drawViolationOverlay({
+      ctx,
+      violation: hoveredViolation,
+      dayStart,
+      dayEnd,
       GRAPH_SIZES,
     });
 
@@ -498,7 +514,7 @@ export default function ELDGraph({
   const noteEvents = events.filter((e) => e.eventComment);
   return (
     <>
-      <div className="relative mb-4 w-fit">
+      <div className="relative mx-auto w-full max-w-[1800px]">
         <canvas
           ref={canvasRef}
           onClick={handleCanvasClick}
@@ -630,7 +646,7 @@ export default function ELDGraph({
                 key={event._id}
                 className={cn(
                   "absolute flex cursor-pointer items-center justify-center rounded-full transition-all duration-200",
-                  note.icons.length > 1 ? "w-12 gap-1" : "w-9",
+                  note.icons.length > 1 ? "w-6 gap-1" : "w-6",
                   focusedId === event._id
                     ? "bg-blue-100 shadow-md ring-2 ring-blue-300"
                     : "hover:bg-blue-100",
@@ -638,9 +654,9 @@ export default function ELDGraph({
                 style={{
                   left: x,
                   top:
-                    GRAPH_SIZES.canvasHeight - GRAPH_SIZES.paddingBottom + 36, // ← second row
-                  height: 36,
-                  transform: `translateX(-50%) scale(${focusedId === event._id ? 1.1 : 1})`,
+                    GRAPH_SIZES.canvasHeight - GRAPH_SIZES.paddingBottom + 24,
+                  height: 24,
+                  transform: `translateX(-50%) scale(${focusedId === event._id ? 1.05 : 1})`,
                   pointerEvents: "auto",
                 }}
                 onClick={(e) => handleIconClick(e, event)}
@@ -649,23 +665,29 @@ export default function ELDGraph({
                   <Icon
                     key={i}
                     color={color}
-                    size={size ?? ICON_SIZES.default + 4} // ← bigger
+                    size={size ?? ICON_SIZES.default} // ← bigger
                   />
                 ))}
               </div>
             );
           })}
         </div>
-      </div>
-      <div className="ml-12 flex flex-wrap gap-2">
-        {currentDayVios.map((v, i) => (
-          <div
-            key={`${v.rule}-${v.startTs}-${i}`}
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
-          >
-            ⚠ {v.message}
-          </div>
-        ))}
+        <div
+          className="flex gap-2"
+          style={{ paddingLeft: GRAPH_SIZES.paddingLeft }}
+        >
+          {currentDayVios.map((v, i) => (
+            <div
+              key={`${v.rule}-${v.startTs}-${i}`}
+              onMouseEnter={() => setHoveredViolation(v)}
+              onMouseLeave={() => setHoveredViolation(null)}
+              className="w-fit rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+            >
+              ⚠ {v.rule} violation at{" "}
+              {DateTime.fromMillis(v.startTs).toFormat("MM/dd hh:mm:ss a")}
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

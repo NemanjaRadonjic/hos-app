@@ -21,11 +21,12 @@ type DriverData = {
 };
 export type DriverSimplified = {
   id: string;
+  dId: string;
   name: string;
   status: string;
   isConnected: boolean;
   location: string;
-  vehicle: string;
+  vehicle: { id: string; name: string; vin: string };
   totalMiles?: number;
 
   breakTime: TimeRule;
@@ -38,6 +39,8 @@ export type DriverSimplified = {
 };
 type UseDriversDataResult = {
   drivers: DriverSimplified[];
+  vehicles: Vehicle[];
+  elds: any[];
   isLoading: boolean;
 };
 export const useDriversData = (): UseDriversDataResult => {
@@ -49,50 +52,64 @@ export const useDriversData = (): UseDriversDataResult => {
   const vehicles = vehiclesQuery.data ?? [];
   const statuses = statusesQuery.data ?? [];
 
-  const drivers = useMemo<DriverSimplified[]>(() => {
-    return statuses.map((status) => {
-      const driver = users.find((u: User) => u._id === status.userId)!;
-      const vehicle = vehicles.find(
-        (v: Vehicle) => v._id === status.vehicle.id,
-      );
-      return {
-        id: status.userId,
-        name: driver
-          ? `${driver.firstName?.trim() || ""} ${driver.lastName?.trim() || ""}`.trim() ||
-            "Unknown Driver"
-          : "Unknown Driver",
-        vehicle: vehicle?.name || "No Vehicle",
-        status: status.hosEvent.eventCode.id,
-        location: status.location?.calculatedLocation || "Unknown Location",
-        driveTime: status.driveTime,
-        shiftTime: status.shiftTime,
-        breakTime: status.breakTime,
-        cycleTime: status.cycleTime,
-        totalMiles: status.hosEvent.totalVehicleMiles,
-        isConnected: status.ec,
-        dataAsCoDriver: {
-          driverInfo: driver?.driverInfo as DriverInfo,
-          id: driver?._id ?? "",
-          firstName: driver?.firstName ?? "",
-          lastName: driver?.lastName ?? "",
-          email: driver?.email ?? "",
-        },
-        dataAsDriver: {
-          avu: driver?.avu,
-          driverInfo: driver?.driverInfo as DriverInfo,
-          id: driver?._id ?? "",
-          firstName: driver?.firstName ?? "",
-          lastName: driver?.lastName ?? "",
-          email: driver?.email ?? "",
-        },
-      };
-    });
+  // for now elds from vehicles, if needed we make request hehe
+  const elds = vehicles.flatMap((v: Vehicle) => (v.eld ? [v.eld] : []));
+
+  const vehicleSimplified = vehicles.flatMap((v: Vehicle) => ({
+    id: v._id,
+    name: v.name,
+    vin: v.vin,
+  }));
+
+  const drivers = useMemo(() => {
+    return statuses
+      .filter((status) => {
+        const driver = users.find((u) => u._id === status.userId);
+        return driver?.active === true;
+      })
+      .map((status) => {
+        const driver = users.find((u) => u._id === status.userId)!;
+        const vehicle = vehicles.find((v) => v._id === status.vehicle.id);
+
+        return {
+          id: status.userId,
+          dId: driver.dId,
+          name: driver
+            ? `${driver.firstName?.trim() || ""} ${driver.lastName?.trim() || ""}`.trim() ||
+              "Unknown Driver"
+            : "Unknown Driver",
+          vehicle: { ...status.vehicle, name: vehicle.name },
+          status: status.hosEvent.eventCode.id,
+          location: status.location?.calculatedLocation || "Unknown Location",
+          driveTime: status.driveTime,
+          shiftTime: status.shiftTime,
+          breakTime: status.breakTime,
+          cycleTime: status.cycleTime,
+          totalMiles: status.hosEvent.totalVehicleMiles,
+          isConnected: status.ec,
+          dataAsCoDriver: {
+            driverInfo: driver?.driverInfo as DriverInfo,
+            id: driver?._id ?? "",
+            firstName: driver?.firstName ?? "",
+            lastName: driver?.lastName ?? "",
+            email: driver?.email ?? "",
+          },
+          dataAsDriver: {
+            avu: driver?.avu,
+            driverInfo: driver?.driverInfo as DriverInfo,
+            id: driver?._id ?? "",
+            firstName: driver?.firstName ?? "",
+            lastName: driver?.lastName ?? "",
+            email: driver?.email ?? "",
+          },
+        };
+      });
   }, [users, vehicles, statuses]);
-  console.log({ drivers });
 
   return {
     drivers,
-
+    vehicles: vehicleSimplified,
+    elds,
     isLoading:
       usersQuery.isLoading ||
       vehiclesQuery.isLoading ||

@@ -31,6 +31,14 @@ export const STATUS_MAP: Record<string, string> = {
   DR_CERT_9: "Certification (>=9)",
 };
 
+export const ORIGIN_MAP = {
+  DRIVER: "Driver",
+  ELD: "Auto",
+  OTHER_USER: "Other user",
+  WITHOUT_ORIGIN: "Without origin",
+  UNIDENTIFIED_DRIVER: "Unidentified Driver",
+};
+
 export const TZ_MAP: Record<string, string> = {
   PT: "America/Los_Angeles",
   MT: "America/Denver",

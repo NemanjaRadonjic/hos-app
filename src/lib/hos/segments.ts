@@ -22,7 +22,6 @@ export function buildSegments(events: HosEvent[]): Segment[] {
 
     const startTs = event.eventTime.timestamp;
 
-    // last segment extends to now
     const endTs = next ? next.eventTime.timestamp : DateTime.now().toMillis();
 
     return {

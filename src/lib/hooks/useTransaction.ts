@@ -1,13 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import type { HosEvent, DailyLog, DailyLogSummary } from "../types";
+import type {
+  HosEvent,
+  DailyLog,
+  DailyLogSummary,
+  DailyLogForm,
+} from "../types";
 import { CHUNK_DAYS, useDailyLogsData } from "./useDailyLogData";
 import { useCompany } from "./useCompany";
 import { getTokenPayload } from "../helpers";
-import { buildDailyLog, buildDailyLogSummary } from "../hos/helpers";
+import {
+  buildDailyLog,
+  buildDailyLogSummary,
+  generateHosEventId,
+} from "../hos/helpers";
 import { useDriverData } from "./useDriverData";
-import { upsertDailyLog, upsertDailyLogSummary, upsertHosEvent } from "../api";
+import {
+  deleteHosEvent,
+  upsertDailyLog,
+  upsertDailyLogSummary,
+  upsertHosEvent,
+} from "../api";
+import { sortEvents } from "../helpers/sort-events";
+
+function stripNulls<T extends Record<string, any>>(
+  obj: T,
+): { [K in keyof T]: Exclude<T[K], null | undefined> } {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v != null),
+  ) as any;
+}
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
 
@@ -15,7 +38,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const queryClient = useQueryClient();
   const { driver } = useDriverData(userId);
   const { data: company } = useCompany();
-  console.log({ company });
 
   const [status, setStatus] = useState<TransactionStatus>("idle");
   console.log({ status });
@@ -29,15 +51,13 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     isFetchingNextPage: isFetchingMore,
   } = useDailyLogsData(userId, selectedDay);
 
-  console.log({ data });
-
   const lastKnownEvent = data?.lastKnownEvent ?? null;
 
   // ─── local mutable state ──────────────────────────────────────────────────
   // events get copied into local state because they can be heavily mutated
   // (timestamp shifts, status changes, etc.)
   const [events, setEvents] = useState<HosEvent[]>([]);
-
+  console.log({ events });
   // dailyLogEdits is a sparse delta — only the fields that changed per log id
   const [dailyLogEdits, setDailyLogEdits] = useState<
     Record<string, Partial<DailyLog>>
@@ -49,19 +69,30 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // not on every render — avoids overwriting user edits
   const pageCount = data?.pages.length ?? 0;
 
+  const lastSyncedUserId = useRef<string | null>(null);
   useEffect(() => {
     setEvents([]);
     setDailyLogEdits({});
-  }, [userId]); // reset everything when driver changes
+    lastSyncedUserId.current = userId;
+  }, [userId]);
 
   useEffect(() => {
     const eventsData = data?.eventsData ?? [];
-    if (eventsData.length > 0) {
+
+    // force re-sync if userId changed even if pageCount didn't
+    if (
+      eventsData.length > 0 &&
+      (pageCount > 0 || lastSyncedUserId.current !== userId)
+    ) {
+      lastSyncedUserId.current = userId;
       setEvents(
         [...eventsData].sort(
           (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
         ),
       );
+    } else if (lastSyncedUserId.current !== userId) {
+      lastSyncedUserId.current = userId;
+      setEvents([]);
     }
   }, [pageCount, userId]);
 
@@ -76,6 +107,66 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       fetchPreviousRange();
     }
   }, [selectedDay, pageCount]);
+
+  const createEvent = (event: Omit<HosEvent, "_id">) => {
+    const newEvent: HosEvent = {
+      ...event,
+      _id: generateHosEventId(),
+    };
+
+    setEvents((prev) =>
+      [...prev, newEvent].sort(
+        (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
+      ),
+    );
+
+    setStatus("pending");
+  };
+
+  const deleteEvent = (eventId: string) => {
+    setEvents((prev) => prev.filter((e) => e._id !== eventId));
+  };
+
+  const updateEvent = (id: string, updater: (event: HosEvent) => HosEvent) => {
+    setEvents((prev) =>
+      sortEvents(
+        prev.map((event) => (event._id === id ? updater(event) : event)),
+      ),
+    );
+
+    setStatus("pending");
+  };
+
+  const updateEventsTimestamp = ({
+    selectedIds,
+    deltaMs,
+  }: {
+    selectedIds: Set<string>;
+    deltaMs: number;
+  }) => {
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (!selectedIds.has(e._id)) return e;
+
+        const newTimestamp = e.eventTime.timestamp + deltaMs;
+
+        const newDate =
+          DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
+
+        return {
+          ...e,
+          eventTime: {
+            ...e.eventTime,
+            timestamp: newTimestamp,
+            logDate: {
+              ...e.eventTime.logDate,
+              date: newDate,
+            },
+          },
+        };
+      }),
+    );
+  };
 
   // ─── daily log helpers ────────────────────────────────────────────────────
   // getDailyLog merges the server data with any local edits for a given date
@@ -94,44 +185,38 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     return { ...base, ...dailyLogEdits[base._id] };
   };
 
-  const updateDailyLog = (id: string, changes: Partial<DailyLog>) => {
+  const updateDailyLog = (id: string, changes: Partial<DailyLogForm>) => {
     const existing = data?.dailyLogsData.find((l) => l._id === id);
+
     if (!driver || !company) {
       console.log("Driver or company not available.");
       return null;
     }
-    if (!existing) {
-      const newLog = buildDailyLog({
-        dailyLogId: id,
-        driver,
-        selectedDay,
-        company,
-      });
-      setDailyLogEdits((prev) => ({
+
+    setDailyLogEdits((prev) => {
+      const base =
+        existing ??
+        buildDailyLog({ dailyLogId: id, driver, selectedDay, company });
+      const prevEdits = prev[id] ?? {};
+
+      const form = {
+        ...base.form,
+        ...(prevEdits.form ?? {}),
+        ...changes,
+      };
+
+      if (!changes.signature) delete form.signature;
+      if (!changes.coDriver) delete form.coDriver;
+
+      return {
         ...prev,
         [id]: {
-          ...newLog,
-          ...changes,
-          form: {
-            ...newLog.form,
-            ...(changes.form ?? {}),
-          },
+          ...base,
+          ...prevEdits,
+          form,
         },
-      }));
-    } else {
-      setDailyLogEdits((prev) => ({
-        ...prev,
-        [id]: {
-          ...prev[id],
-          ...changes,
-          form: {
-            ...existing.form,
-            ...(prev[id]?.form ?? {}),
-            ...(changes.form ?? {}),
-          },
-        },
-      }));
-    }
+      };
+    });
 
     setStatus("pending");
   };
@@ -148,28 +233,41 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       "driverData",
       userId,
     ]);
+
     const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
+
     const originalLogs =
       cachedData?.pages.flatMap((p) => p.dailyLogsData) ?? [];
 
+    const originalMap = new Map(originalEvents.map((e) => [e._id, e]));
+
+    const currentMap = new Map(events.map((e) => [e._id, e]));
+
     const changedEvents = events.filter((curr) => {
-      const orig = originalEvents.find((e) => e._id === curr._id);
+      const orig = originalMap.get(curr._id);
       return JSON.stringify(orig) !== JSON.stringify(curr);
     });
 
-    // merge each edited log with its base for full object the server expects
+    const deletedEventIds = originalEvents
+      .filter((e) => !currentMap.has(e._id))
+      .map((e) => e._id);
+
     const changedLogs = Object.entries(dailyLogEdits).map(([id, edits]) => {
       const base = originalLogs.find((l) => l._id === id);
       return { ...base, ...edits };
     });
 
-    return { changedEvents, changedLogs };
+    return {
+      changedEvents,
+      deletedEventIds,
+      changedLogs,
+    };
   };
 
   const commit = async () => {
     setStatus("saving");
-    const { changedEvents, changedLogs } = getSavePayload();
-    console.log({ changedEvents, changedLogs });
+    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
+    console.log({ changedEvents, changedLogs, deletedEventIds });
     const failed: string[] = [];
 
     // daily logs
@@ -177,22 +275,37 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
       try {
         await upsertDailyLog(log._id, log);
-        await upsertDailyLogSummary(
-          summaryId,
-          buildDailyLogSummary(
-            summaryId,
-            driver.id,
-            log.logDate.date,
-            Boolean(log),
-            Boolean(log.form.signature),
-          ),
-        );
+        const existingSummary = getSummary(log.logDate.date);
+
+        // const hasForms =
+        //   log.form.vehicle ||
+        //   log.form.signature ||
+        //   log.form.shippingDocuments.length ||
+        //   log.form.trailers.length;
+
+        // if i want full control over the form dive into this, but not neede rn
+
+        const summary = existingSummary
+          ? {
+              ...existingSummary,
+              hasForms: true,
+              isSigned: Boolean(log.form.signature),
+            }
+          : buildDailyLogSummary({
+              id: summaryId,
+              dId: driver.dId,
+              userId: driver.id,
+              date: log.logDate.date,
+              isSigned: Boolean(log.form.signature),
+            });
+        console.log({ summary });
+        await upsertDailyLogSummary(summaryId, summary);
       } catch {
         failed.push(log._id);
       }
     }
 
-    // events
+    events;
     for (const event of changedEvents) {
       try {
         await upsertHosEvent(event._id, event);
@@ -201,8 +314,13 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       }
     }
 
-    // events (add later when endpoint is ready)
-    // for (const event of changedEvents) { ... }
+    for (const id of deletedEventIds) {
+      try {
+        await deleteHosEvent(id);
+      } catch {
+        failed.push(id);
+      }
+    }
 
     if (failed.length > 0) {
       setStatus("error");
@@ -226,7 +344,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       userId,
     ]);
     const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
-    setEvents(originalEvents);
+    setEvents(
+      [...originalEvents].sort(
+        (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
+      ),
+    );
     setDailyLogEdits({});
   };
 
@@ -239,7 +361,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     // mutable events array — use this everywhere instead of raw cache
     events,
     lastKnownEvent,
-    setEvents,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    updateEventsTimestamp,
+    setDailyLogEdits,
 
     // all summaries if you need to iterate (e.g. calendar view)
     summaries: data?.dailySummariesData ?? [],

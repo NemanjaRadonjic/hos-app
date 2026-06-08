@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { HosGauge } from "../hos-gauge";
-import type { HosTimers } from "@/lib/hos/calculations-old";
 import { Switch } from "../ui/switch";
 import * as SwitchPrimitives from "@radix-ui/react-switch";
 import { HiServerStack } from "react-icons/hi2";
 import { MdCalculate } from "react-icons/md";
+import type { DriverSimplified } from "@/lib/hooks/useDriversData";
 type HosClocksProps = {
-  hosTimers: HosTimers;
+  hosTimers: any;
+  driver: DriverSimplified;
 };
 
 const toGaugeClock = (value: number, max: number) => ({
@@ -15,7 +16,7 @@ const toGaugeClock = (value: number, max: number) => ({
 });
 
 const hosClock = (clock: { usedMs: number; remainingMs: number }) =>
-  toGaugeClock(clock.usedMs, clock.usedMs + clock.remainingMs);
+  toGaugeClock(clock?.usedMs, clock?.usedMs + clock?.remainingMs);
 
 const relayClock = (clock?: { accumulatedTime: number; limitTime: number }) =>
   toGaugeClock(clock?.accumulatedTime ?? 0, clock?.limitTime ?? 0);
@@ -65,7 +66,7 @@ const HosClocks = ({ hosTimers, driver }: HosClocksProps) => {
           max={shiftClock.max}
           color="var(--hos-DS_ON-bg)"
         />
-        {hosTimers.currentCycle.isRecap && enabled ? (
+        {hosTimers.currentCycle?.isRecap && enabled ? (
           <HosGauge
             large
             label="Recap"

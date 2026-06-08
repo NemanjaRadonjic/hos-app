@@ -8,14 +8,14 @@ import { getTokenPayload } from "@/lib/helpers";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
-  reset: () => void;
+  resetSelection: () => void;
   onApply: (deltaMs: number) => void;
 };
 
 export default function ControlBar({
   selectedIds,
-  reset,
-  onApply,
+  resetSelection,
+  updateEventsTimestamp,
   selectDuration,
   transactionStatus,
 }: ControlBarProps) {
@@ -25,7 +25,7 @@ export default function ControlBar({
 
   const count = selectedIds.size;
 
-  const { commit } = useTransactionContext();
+  const { commit, reset } = useTransactionContext();
 
   const handleSubmit = () => {
     const h = parseInt(hours || "0", 10);
@@ -33,11 +33,11 @@ export default function ControlBar({
     const s = parseInt(seconds || "0", 10);
     const deltaMs = (h * 3600 + m * 60 + s) * 1000;
     if (deltaMs === 0) return;
-    onApply(deltaMs);
+    updateEventsTimestamp({ selectedIds, deltaMs });
     setHours("");
     setMinutes("");
     setSeconds("");
-    reset();
+    resetSelection();
   };
 
   useEffect(() => {
@@ -66,7 +66,6 @@ export default function ControlBar({
 
       <div className="bg-border h-4 w-px" />
 
-      {/* time inputs */}
       <div className="flex items-center gap-1">
         <TimeInput
           value={hours}
@@ -90,19 +89,20 @@ export default function ControlBar({
           max={59}
           allowNegative
         />
+        <Button size="sm" onClick={handleSubmit}>
+          Apply
+        </Button>
       </div>
 
-      <Button size="sm" onClick={handleSubmit}>
-        Apply
-      </Button>
+      <div className="ml-auto flex items-center gap-2">
+        <Button disabled={status === "idle"} onClick={commit}>
+          {status === "saving" ? "Saving..." : "Finish"}
+        </Button>
 
-      <Button disabled={status === "idle"} onClick={commit}>
-        {status === "saving" ? "Saving..." : "Finish"}
-      </Button>
-
-      <Button variant="outline" disabled={status === "idle"}>
-        Discard
-      </Button>
+        <Button variant="outline" disabled={status === "idle"} onClick={reset}>
+          Reset
+        </Button>
+      </div>
     </div>
   );
 }

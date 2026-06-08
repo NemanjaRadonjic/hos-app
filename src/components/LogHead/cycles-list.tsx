@@ -39,7 +39,6 @@ export const CycleList = ({
   const previewCycles = indexedCycles
     .slice(activeCycleIndex, activeCycleIndex + 3)
     .filter(Boolean);
-  console.log({ previewCycles });
   const previewSet = new Set(previewCycles.map((c) => c.startTs));
   return (
     <HoverCard openDelay={0}>
@@ -107,7 +106,7 @@ export const CycleList = ({
                 {msToHHMMSS(cstate.usedMs)} -{" "}
                 {cstate.startTs
                   ? DateTime.fromMillis(cstate.startTs).toFormat(
-                      "MMM dd HH:MM a",
+                      "MMM dd hh:mm a",
                     )
                   : "Unknown"}
               </span>

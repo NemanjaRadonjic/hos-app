@@ -1,27 +1,33 @@
-import { Checkbox } from "./ui/checkbox";
-import { TableCell, TableRow } from "./ui/table";
+import { Checkbox } from "../ui/checkbox";
+import { TableCell, TableRow } from "../ui/table";
 import { DateTime, Duration } from "luxon";
 import {
   EVENT_BADGE_COLORS,
   mainEventCodes,
+  ORIGIN_MAP,
   STATUS_MAP,
   TZ_MAP,
 } from "@/lib/maps";
-import { Badge } from "./ui/badge";
+import { Badge } from "../ui/badge";
 import type { HosEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { getNoteIcons } from "@/lib/helpers";
-import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { MapPin } from "lucide-react";
 import { FaMapMarkedAlt } from "react-icons/fa";
+import EventCode from "./event-code";
+import { memo } from "react";
+import type { EventInfo } from "@/routes/drivers/$driverId";
 
 interface LogEventProps {
   event: HosEvent;
+  eventInfo: EventInfo;
   checked: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
   focused: boolean;
   setFocusedId: React.Dispatch<React.SetStateAction<string | null>>;
+  setEditingEvent: React.Dispatch<React.SetStateAction<HosEvent | null>>;
 }
 
 const formatTimestampEvent = (
@@ -52,17 +58,14 @@ export const formatDuration = (ms?: number | null) => {
 
 const LogEvent = ({
   event,
+  eventInfo,
   checked,
   onCheckboxClick,
   focused,
   setFocusedId,
+  setEditingEvent,
 }: LogEventProps) => {
   const tz = event.eventTime.logDate.timeZone.id;
-  const code = event.eventCode.id;
-  const label = code.includes("CERT")
-    ? `${STATUS_MAP[code]} ${event.certifiedRecordLogDate?.date}`
-    : STATUS_MAP[code];
-  const variant = STATUS_MAP[code] ?? "outline";
 
   const icons = getNoteIcons(event.eventComment);
 
@@ -79,7 +82,10 @@ const LogEvent = ({
           ? "bg-indigo-100 shadow-sm hover:bg-blue-200 dark:bg-blue-900/70"
           : "hover:bg-muted/50",
       )}
-      onClick={() => setFocusedId(event._id)}
+      onClick={() => {
+        setFocusedId(event._id);
+        console.log({ eventClicked: event });
+      }}
     >
       <TableCell
         onClick={(e) => {
@@ -94,23 +100,15 @@ const LogEvent = ({
         {formatTimestampEvent(event.eventTime.timestamp, tz)}
       </TableCell>
       <TableCell>
-        {event.duration && (
+        {eventInfo.duration && (
           <Badge variant="secondary" className="bg-transparent text-gray-600">
-            {event.duration != null ? msToHoursMinutes(event.duration) : ""}
+            {eventInfo.duration != null
+              ? msToHoursMinutes(eventInfo.duration)
+              : ""}
           </Badge>
         )}
       </TableCell>
-      <TableCell>
-        <Badge className={EVENT_BADGE_COLORS[code]}>
-          {mainEventCodes.includes(code) && (
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: `var(--hos-${code}-fg)` }}
-            />
-          )}
-          {label}
-        </Badge>
-      </TableCell>
+      <EventCode event={event} setEditingEvent={setEditingEvent} />
       <TableCell className="text-muted-foreground max-w-[200px] truncate text-sm">
         <div className="flex items-center gap-4">
           {event.location?.lat && event.location?.lon && (
@@ -132,28 +130,28 @@ const LogEvent = ({
         </div>
       </TableCell>
       <TableCell className="text-muted-foreground text-xs">
-        {event.recordOrigin?.id}
+        {ORIGIN_MAP[event.recordOrigin?.id]}
       </TableCell>
       <TableCell className="relative text-center text-sm tabular-nums">
         {event.totalVehicleMiles}
 
-        {event.odoDelta != null && event.odoDelta > 0 && (
+        {eventInfo.odoDelta != null && eventInfo.odoDelta > 0 && (
           <Badge className="absolute ml-2 whitespace-nowrap">
-            +{event.odoDelta}
+            +{eventInfo.odoDelta}
           </Badge>
         )}
       </TableCell>
       <TableCell className="relative text-center text-sm tabular-nums">
         {event.totalEngineHours}
-        {event.engHoursDelta != null && event.engHoursDelta > 0 && (
+        {eventInfo.engHoursDelta != null && eventInfo.engHoursDelta > 0 && (
           <Badge className="absolute ml-2 whitespace-nowrap">
-            +{event.engHoursDelta.toFixed(1)}
+            +{eventInfo.engHoursDelta.toFixed(1)}
           </Badge>
         )}
       </TableCell>
       <TableCell className="text-muted-foreground text-xs">
         {event.eventComment && (
-          <Badge variant="outline" className="text-sm [&>svg]:size-auto">
+          <Badge variant="outline" className="[&>svg]:size-auto">
             {icons?.icons.map(({ Icon, color, size }, i) => (
               <Icon key={i} color={color} size={size - 4} />
             ))}
@@ -167,4 +165,4 @@ const LogEvent = ({
   );
 };
 
-export default LogEvent;
+export default memo(LogEvent);
