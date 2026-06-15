@@ -1,3 +1,4 @@
+import { STATE_NAMES } from "../maps";
 import cities from "../places_us.json";
 
 interface CityDataRaw {
@@ -100,18 +101,29 @@ function findNearestCity(lat: number, lon: number) {
   return { city: best, distance: bestDistance };
 }
 
-export function getCalculatedLocation(lat: number, lon: number): string | null {
+export function getCalculatedLocationData(lat: number, lon: number) {
   const { city, distance } = findNearestCity(lat, lon);
 
-  if (!city) return null;
+  if (!city) {
+    return {
+      calculatedLocation: "",
+      state: "",
+    };
+  }
 
   const miles = Math.round(distance);
 
   if (miles === 0) {
-    return `${city.name}, ${city.state}`;
+    return {
+      calculatedLocation: `${city.name}, ${city.state}`,
+      state: STATE_NAMES[city.state],
+    };
   }
 
   const direction = bearingDirection(lat, lon, city.lat, city.lon);
 
-  return `${miles}mi ${direction} from ${city.name}, ${city.state}`;
+  return {
+    calculatedLocation: `${miles}mi ${direction} from ${city.name}, ${city.state}`,
+    state: STATE_NAMES[city.state],
+  };
 }

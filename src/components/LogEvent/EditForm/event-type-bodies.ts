@@ -1,6 +1,17 @@
 import { DateTime } from "luxon";
+import type {
+  AppHosEvent,
+  AuthHosEvent,
+  BasicHosEvent,
+  CertHosEvent,
+  DiagHosEvent,
+} from "../helpers/types";
+import type { HosEvent } from "@/lib/types";
 
-export function buildBasicEventType(prev: any, status: string) {
+export function buildBasicEventType(
+  prev: HosEvent,
+  status: string,
+): BasicHosEvent {
   return {
     _id: prev._id,
     companyId: prev.companyId,
@@ -26,7 +37,7 @@ export function buildBasicEventType(prev: any, status: string) {
 
     vehicle: { ...prev.vehicle },
 
-    eld: prev.eld ? { ...prev.eld } : null,
+    eld: prev.eld ? { ...prev.eld } : undefined,
 
     recordStatus: prev.recordStatus ?? { id: "ACTIVE" },
     recordOrigin: prev.recordOrigin ?? { id: "DRIVER" },
@@ -41,6 +52,8 @@ export function buildBasicEventType(prev: any, status: string) {
 
     totalVehicleMiles: prev.totalVehicleMiles ?? 0,
     totalEngineHours: prev.totalEngineHours ?? 0,
+
+    // optional props that exist on some statuses
     ...(prev.accumulatedVehicleMiles !== undefined && {
       accumulatedVehicleMiles: prev.accumulatedVehicleMiles,
     }),
@@ -50,12 +63,21 @@ export function buildBasicEventType(prev: any, status: string) {
     ...(prev.distSinceLastValidCoords !== undefined && {
       distSinceLastValidCoords: prev.distSinceLastValidCoords,
     }),
+    ...(prev.diagnosticIndicatorStatus !== undefined && {
+      diagnosticIndicatorStatus: prev.diagnosticIndicatorStatus,
+    }),
+    ...(prev.malfuncIndicatorStatus !== undefined && {
+      malfuncIndicatorStatus: prev.malfuncIndicatorStatus,
+    }),
 
-    location: prev.location ? { ...prev.location } : null,
+    location: prev.location ? { ...prev.location } : undefined,
   };
 }
 
-export function buildCertEventType(prev: any, status: string) {
+export function buildCertEventType(
+  prev: HosEvent,
+  status: string,
+): CertHosEvent {
   const certDate = DateTime.fromFormat(
     prev.eventTime.logDate.date,
     "yyyy/MM/dd",
@@ -89,10 +111,7 @@ export function buildCertEventType(prev: any, status: string) {
 
     suggestedEditEventIds: prev.suggestedEditEventIds ?? [],
 
-    // what ?
-    accumulatedVehicleMiles: 0,
-    elapsedEngineHours: 0,
-    distSinceLastValidCoords: 0,
+    // optional props that exist on some statuses
     ...(prev.accumulatedVehicleMiles !== undefined && {
       accumulatedVehicleMiles: prev.accumulatedVehicleMiles,
     }),
@@ -125,7 +144,10 @@ export function buildCertEventType(prev: any, status: string) {
   };
 }
 
-export function buildAuthEventType(prev: any, status: string) {
+export function buildAuthEventType(
+  prev: HosEvent,
+  status: string,
+): AuthHosEvent {
   return {
     _id: prev._id,
     companyId: prev.companyId,
@@ -156,6 +178,23 @@ export function buildAuthEventType(prev: any, status: string) {
 
     eld: prev.eld ? { ...prev.eld } : undefined,
 
+    // optional props that exist on some statuses
+    ...(prev.accumulatedVehicleMiles !== undefined && {
+      accumulatedVehicleMiles: prev.accumulatedVehicleMiles,
+    }),
+    ...(prev.elapsedEngineHours !== undefined && {
+      elapsedEngineHours: prev.elapsedEngineHours,
+    }),
+    ...(prev.distSinceLastValidCoords !== undefined && {
+      distSinceLastValidCoords: prev.distSinceLastValidCoords,
+    }),
+    ...(prev.diagnosticIndicatorStatus !== undefined && {
+      diagnosticIndicatorStatus: prev.diagnosticIndicatorStatus,
+    }),
+    ...(prev.malfuncIndicatorStatus !== undefined && {
+      malfuncIndicatorStatus: prev.malfuncIndicatorStatus,
+    }),
+
     // stime: Date.now(),
     dSTime: -1,
     dId: prev.dId,
@@ -167,15 +206,19 @@ export function buildAuthEventType(prev: any, status: string) {
   };
 }
 
-export function buildDiagEventType(prev: any, status: string) {
+export function buildDiagEventType(
+  prev: HosEvent,
+  status: string,
+): DiagHosEvent {
   return {
+    _id: prev._id,
     companyId: prev.companyId,
     userId: prev.userId,
 
-    createdBy: prev.createdBy,
-    createdAt: prev.createdAt,
-    updatedBy: prev.updatedBy,
-    updatedAt: prev.updatedAt,
+    // createdBy: prev.createdBy,
+    // createdAt: prev.createdAt,
+    // updatedBy: prev.updatedBy,
+    // updatedAt: prev.updatedAt,
 
     seqId: prev.seqId,
 
@@ -194,17 +237,42 @@ export function buildDiagEventType(prev: any, status: string) {
 
     eld: prev.eld ? { ...prev.eld } : undefined,
 
+    recordOrigin: {
+      id: "ELD",
+    },
+
     suggestedEditEventIds: prev.suggestedEditEventIds ?? [],
 
-    stime: Date.now(),
+    // stime: Date.now(),
+    dSTime: -1,
     dId: prev.dId,
 
-    fc: prev.fc ? { ...prev.fc } : undefined,
+    fc: prev.fc ? { ...prev.fc } : { id: "D_POWER" },
 
-    dg: prev.dg ? { ...prev.dg } : undefined,
+    dg: prev.dg ? { ...prev.dg } : { cm: "pw:eeo" },
 
-    malfuncIndicatorStatus: prev.malfuncIndicatorStatus ?? false,
-    diagnosticIndicatorStatus: prev.diagnosticIndicatorStatus ?? false,
+    totalVehicleMiles: prev.totalVehicleMiles ?? 0,
+    totalEngineHours: prev.totalEngineHours ?? 0,
+
+    // optional props that exist on some statuses
+    ...(prev.accumulatedVehicleMiles !== undefined && {
+      accumulatedVehicleMiles: prev.accumulatedVehicleMiles,
+    }),
+    ...(prev.elapsedEngineHours !== undefined && {
+      elapsedEngineHours: prev.elapsedEngineHours,
+    }),
+    ...(prev.distSinceLastValidCoords !== undefined && {
+      distSinceLastValidCoords: prev.distSinceLastValidCoords,
+    }),
+    ...(prev.diagnosticIndicatorStatus !== undefined && {
+      diagnosticIndicatorStatus: prev.diagnosticIndicatorStatus,
+    }),
+    ...(prev.malfuncIndicatorStatus !== undefined && {
+      malfuncIndicatorStatus: prev.malfuncIndicatorStatus,
+    }),
+
+    pd: false,
+    at: true,
 
     location: prev.location ? { ...prev.location } : undefined,
   };

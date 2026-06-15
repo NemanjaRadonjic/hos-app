@@ -26,8 +26,8 @@ import {
   TransactionContext,
   useTransactionContext,
 } from "@/lib/hooks/TransactionContext";
-import { EditEventModal } from "@/components/LogEvent/edit-form";
 import checkCert from "@/lib/helpers/check-cert";
+import { EditEventModal } from "@/components/LogEvent/EditForm";
 
 export type EventInfo = {
   duration: number | null;
@@ -289,6 +289,7 @@ function DriverPage() {
                   <TableHead className="w-20">Duration</TableHead>
                   <TableHead className="w-80">Event</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead className="w-20">Status</TableHead>
                   <TableHead className="w-20">Origin</TableHead>
                   <TableHead className="w-40 text-center">Odometer</TableHead>
                   <TableHead className="w-40 text-center">Eng. Hours</TableHead>

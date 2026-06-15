@@ -274,12 +274,9 @@ export type HosEvent = {
   seqId: string;
   totalVehicleMiles?: number;
   totalEngineHours?: number;
-  accumulatedVehicleMiles?: number;
-  elapsedEngineHours?: number;
-  distSinceLastValidCoords?: number;
   isLive: boolean;
-  recordStatus: { id: string };
-  recordOrigin: { id: string };
+  recordStatus?: { id: string };
+  recordOrigin?: { id: string };
   eventCode: { id: string };
   eventTime: {
     timestamp: number;
@@ -302,28 +299,51 @@ export type HosEvent = {
     state: string;
     timestamp: number;
   };
-  eld: {
+  eld?: {
     id: string;
     serialNumber: string;
     sn: string;
   };
   suggestedEditEventIds: string[];
-  av: string;
+  av?: string;
   pd: boolean;
   at: boolean;
-  type: { id: string };
+  type: { id: "HosEvent" };
   dSTime: number;
   dId: string;
   stime: number;
   eventComment?: string;
   certifiedRecordLogDate?: {
     date: string;
-    timezone: {
+    timeZone: {
       id: string;
     };
     logStartOffset: number;
   };
+  driverLocationDescription?: string;
+
+  // diags
+  fc?: { id: string };
+  dg?: { cm: string };
+
+  // optional i guess, props that appear on some statuses
+  malfuncIndicatorStatus?: boolean;
+  diagnosticIndicatorStatus?: boolean;
+  accumulatedVehicleMiles?: number;
+  elapsedEngineHours?: number;
+  distSinceLastValidCoords?: number;
 };
+
+type ServerFields =
+  | "_rev"
+  | "createdBy"
+  | "createdAt"
+  | "updatedBy"
+  | "updatedAt"
+  | "stime";
+
+export type HosEventPayload = Omit<HosEvent, ServerFields> &
+  Partial<Pick<HosEvent, ServerFields>>;
 
 export interface Location {
   calculatedLocation: string;

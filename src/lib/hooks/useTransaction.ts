@@ -6,6 +6,7 @@ import type {
   DailyLog,
   DailyLogSummary,
   DailyLogForm,
+  HosEventPayload,
 } from "../types";
 import { CHUNK_DAYS, useDailyLogsData } from "./useDailyLogData";
 import { useCompany } from "./useCompany";
@@ -24,15 +25,19 @@ import {
 } from "../api";
 import { sortEvents } from "../helpers/sort-events";
 
-function stripNulls<T extends Record<string, any>>(
-  obj: T,
-): { [K in keyof T]: Exclude<T[K], null | undefined> } {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v != null),
-  ) as any;
-}
-
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
+
+type CommitProgress = {
+  done: number;
+  total: number;
+  success: number;
+  failed: number;
+  current?: string;
+};
+
+type CommitResult = {
+  failed: string[];
+};
 
 export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const queryClient = useQueryClient();
@@ -56,7 +61,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // ─── local mutable state ──────────────────────────────────────────────────
   // events get copied into local state because they can be heavily mutated
   // (timestamp shifts, status changes, etc.)
-  const [events, setEvents] = useState<HosEvent[]>([]);
+  const [events, setEvents] = useState<HosEventPayload[]>([]);
   console.log({ events });
   // dailyLogEdits is a sparse delta — only the fields that changed per log id
   const [dailyLogEdits, setDailyLogEdits] = useState<
@@ -127,7 +132,10 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     setEvents((prev) => prev.filter((e) => e._id !== eventId));
   };
 
-  const updateEvent = (id: string, updater: (event: HosEvent) => HosEvent) => {
+  const updateEvent = (
+    id: string,
+    updater: (event: HosEventPayload) => HosEventPayload,
+  ) => {
     setEvents((prev) =>
       sortEvents(
         prev.map((event) => (event._id === id ? updater(event) : event)),
@@ -144,6 +152,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     selectedIds: Set<string>;
     deltaMs: number;
   }) => {
+    setStatus("pending");
     setEvents((prev) =>
       prev.map((e) => {
         if (!selectedIds.has(e._id)) return e;
@@ -264,26 +273,129 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     };
   };
 
-  const commit = async () => {
+  // const commit = async () => {
+  //   setStatus("saving");
+  //   const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
+  //   console.log({ changedEvents, changedLogs, deletedEventIds });
+  //   const failed: string[] = [];
+
+  //   // daily logs
+  //   for (const log of changedLogs) {
+  //     const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
+  //     try {
+  //       await upsertDailyLog(log._id, log);
+  //       const existingSummary = getSummary(log.logDate.date);
+
+  //       // const hasForms =
+  //       //   log.form.vehicle ||
+  //       //   log.form.signature ||
+  //       //   log.form.shippingDocuments.length ||
+  //       //   log.form.trailers.length;
+
+  //       // if i want full control over the form dive into this, but not neede rn
+
+  //       const summary = existingSummary
+  //         ? {
+  //             ...existingSummary,
+  //             hasForms: true,
+  //             isSigned: Boolean(log.form.signature),
+  //           }
+  //         : buildDailyLogSummary({
+  //             id: summaryId,
+  //             dId: driver.dId,
+  //             userId: driver.id,
+  //             date: log.logDate.date,
+  //             isSigned: Boolean(log.form.signature),
+  //           });
+  //       console.log({ summary });
+  //       await upsertDailyLogSummary(summaryId, summary);
+  //     } catch {
+  //       failed.push(log._id);
+  //     }
+  //   }
+
+  //   events;
+  //   for (const event of changedEvents) {
+  //     try {
+  //       await upsertHosEvent(event._id, event);
+  //     } catch {
+  //       failed.push(event._id);
+  //     }
+  //   }
+
+  //   for (const id of deletedEventIds) {
+  //     try {
+  //       await deleteHosEvent(id);
+  //     } catch {
+  //       failed.push(id);
+  //     }
+  //   }
+
+  //   if (failed.length > 0) {
+  //     setStatus("error");
+  //     // rollback failed log edits
+  //     setDailyLogEdits((prev) => {
+  //       const next = { ...prev };
+  //       failed.forEach((id) => delete next[id]);
+  //       return next;
+  //     });
+  //   } else {
+  //     setStatus("idle");
+  //     setDailyLogEdits({});
+  //     await queryClient.refetchQueries({ queryKey: ["driverData", userId] });
+  //   }
+  // };
+
+  const commit = async (
+    onProgress?: (p: CommitProgress) => void,
+  ): Promise<CommitResult> => {
     setStatus("saving");
+
     const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
-    console.log({ changedEvents, changedLogs, deletedEventIds });
+
+    const total =
+      changedLogs.length * 2 + changedEvents.length + deletedEventIds.length;
+
+    let done = 0;
+    let success = 0;
+    let failedCount = 0;
+
     const failed: string[] = [];
 
-    // daily logs
+    const report = (current?: string) => {
+      onProgress?.({
+        done,
+        total,
+        success,
+        failed: failedCount,
+        current,
+      });
+    };
+
+    report();
+
+    const run = async (id: string, fn: () => Promise<void>) => {
+      try {
+        await fn();
+        success++;
+      } catch {
+        failedCount++;
+        failed.push(id);
+      } finally {
+        done++;
+        report(id);
+      }
+    };
+
     for (const log of changedLogs) {
       const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
-      try {
+
+      await run(log._id, async () => {
         await upsertDailyLog(log._id, log);
+      });
+
+      await run(summaryId, async () => {
         const existingSummary = getSummary(log.logDate.date);
-
-        // const hasForms =
-        //   log.form.vehicle ||
-        //   log.form.signature ||
-        //   log.form.shippingDocuments.length ||
-        //   log.form.trailers.length;
-
-        // if i want full control over the form dive into this, but not neede rn
 
         const summary = existingSummary
           ? {
@@ -298,47 +410,58 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
               date: log.logDate.date,
               isSigned: Boolean(log.form.signature),
             });
-        console.log({ summary });
+
         await upsertDailyLogSummary(summaryId, summary);
-      } catch {
-        failed.push(log._id);
-      }
+      });
     }
 
-    events;
     for (const event of changedEvents) {
-      try {
+      await run(event._id, async () => {
         await upsertHosEvent(event._id, event);
-      } catch {
-        failed.push(event._id);
-      }
+      });
     }
 
     for (const id of deletedEventIds) {
-      try {
+      await run(id, async () => {
         await deleteHosEvent(id);
-      } catch {
-        failed.push(id);
-      }
+      });
     }
 
     if (failed.length > 0) {
       setStatus("error");
-      // rollback failed log edits
-      setDailyLogEdits((prev) => {
-        const next = { ...prev };
-        failed.forEach((id) => delete next[id]);
-        return next;
-      });
-    } else {
-      setStatus("idle");
-      setDailyLogEdits({});
-      await queryClient.refetchQueries({ queryKey: ["driverData", userId] });
+
+      return {
+        failed,
+      };
     }
+
+    setStatus("idle");
+    setDailyLogEdits({});
+
+    await queryClient.refetchQueries({
+      queryKey: ["driverData", userId],
+    });
+
+    return {
+      failed,
+    };
+  };
+
+  const getSaveStats = () => {
+    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
+
+    return {
+      changedEvents: changedEvents.length,
+      changedLogs: changedLogs.length,
+      deletedEvents: deletedEventIds.length,
+      totalRequests:
+        changedEvents.length + deletedEventIds.length + changedLogs.length * 2, // daily log + summary
+    };
   };
 
   // reset restores events from cache and clears all log edits
   const reset = () => {
+    setStatus("idle");
     const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
       "driverData",
       userId,
@@ -357,6 +480,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     // per-day selectors
     getDailyLog,
     getSummary,
+    getSaveStats,
 
     // mutable events array — use this everywhere instead of raw cache
     events,

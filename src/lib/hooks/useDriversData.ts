@@ -78,7 +78,7 @@ export const useDriversData = (): UseDriversDataResult => {
             ? `${driver.firstName?.trim() || ""} ${driver.lastName?.trim() || ""}`.trim() ||
               "Unknown Driver"
             : "Unknown Driver",
-          vehicle: { ...status.vehicle, name: vehicle.name },
+          vehicle: { ...status.vehicle, name: vehicle?.name },
           status: status.hosEvent.eventCode.id,
           location: status.location?.calculatedLocation || "Unknown Location",
           driveTime: status.driveTime,

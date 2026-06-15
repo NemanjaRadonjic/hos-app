@@ -157,7 +157,7 @@ function buildCycleStates(segments: Segment[]): CycleState[] {
                   ).days
               : 999;
 
-          const isRecap = daysSpan > 8;
+          const isRecap = daysSpan >= 8;
 
           let finalUsed = usedMs;
           if (isRecap && cycleStartTs !== null) {
@@ -246,7 +246,7 @@ function buildCycleStates(segments: Segment[]): CycleState[] {
               "days",
             ).days;
 
-    const isRecap = daysSpan > 8;
+    const isRecap = daysSpan >= 8;
 
     let finalUsed = usedMs;
     if (isRecap) {
@@ -584,6 +584,10 @@ function checkClockWindowViolations({
   return violations;
 }
 
+// TODO: differently typed, chained split recalculation
+// The engine currently doesnt support type 7 > 4 > 2 > 8+
+// TODO: apparently pairs of 7 into small split also doesnt exclude the small ?
+
 function completeSplitPair({
   violations,
   segments,
@@ -855,6 +859,14 @@ function processSegment(
   }
 
   if (clockWindow !== null && isOnDuty(seg)) {
+    const prevExcludedMs = getExcludedMs(
+      clockWindow.anchorTs,
+      seg.startTs,
+      clockWindow.excludedRest,
+    );
+
+    const prevShiftUsedMs = seg.startTs - clockWindow.anchorTs - prevExcludedMs;
+
     const excludedMs = getExcludedMs(
       clockWindow.anchorTs,
       seg.endTs,
@@ -864,16 +876,17 @@ function processSegment(
     const shiftUsedMs = seg.endTs - clockWindow.anchorTs - excludedMs;
 
     if (
+      prevShiftUsedMs < FOURTEEN_HOURS_MS &&
       shiftUsedMs >= FOURTEEN_HOURS_MS &&
       last14ViolationAnchorTs !== clockWindow.anchorTs
     ) {
-      const violationTs = clockWindow.anchorTs + excludedMs + FOURTEEN_HOURS_MS;
+      const msNeeded = FOURTEEN_HOURS_MS - prevShiftUsedMs;
 
       violations = [
         ...violations,
         {
           rule: "14h",
-          startTs: violationTs,
+          startTs: seg.startTs + msNeeded,
           endTs: getFullResetStartTs(segments, segIndex + 1),
           anchorTs: clockWindow.anchorTs,
         },

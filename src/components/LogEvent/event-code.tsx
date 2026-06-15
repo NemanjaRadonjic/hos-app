@@ -16,8 +16,7 @@ import { HiDocumentDuplicate } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { FaCut } from "react-icons/fa";
 import { BiSolidTrashAlt } from "react-icons/bi";
-import { EditEventModal } from "./edit-form";
-import { useState } from "react";
+
 import StatusBadge from "../ui/status-badge";
 
 type EventAction = "SET_DS_OFF" | "SET_DS_SB" | "SET_DS_ON" | "CUT_EVENT";
@@ -154,7 +153,6 @@ export default function EventCode({
           ))}
         </ContextMenuContent>
       </ContextMenu>
-      {/* <EditEventModal event={event} open={open} onOpenChange={setOpen} /> */}
     </TableCell>
   );
 }

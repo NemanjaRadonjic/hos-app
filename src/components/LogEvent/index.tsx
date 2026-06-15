@@ -110,24 +110,31 @@ const LogEvent = ({
       </TableCell>
       <EventCode event={event} setEditingEvent={setEditingEvent} />
       <TableCell className="text-muted-foreground max-w-[200px] truncate text-sm">
-        <div className="flex items-center gap-4">
-          {event.location?.lat && event.location?.lon && (
-            <Dialog>
-              <DialogTrigger asChild>
-                <button className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                  <FaMapMarkedAlt size={20} />
-                </button>
-              </DialogTrigger>
-              <DialogContent className="h-[60vh] w-[60vw] max-w-[100vw] p-0">
-                <iframe
-                  src={`https://www.google.com/maps?q=${event.location.lat},${event.location.lon}&z=18&t=k&output=embed`}
-                  className="h-full w-full rounded-lg"
-                />
-              </DialogContent>
-            </Dialog>
+        <div>
+          {event.location ? (
+            <div className="flex items-center gap-4">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                    <FaMapMarkedAlt size={16} />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="h-[60vh] w-[60vw] max-w-[100vw] p-0">
+                  <iframe
+                    src={`https://www.google.com/maps?q=${event.location.lat},${event.location.lon}&z=18&t=k&output=embed`}
+                    className="h-full w-full rounded-lg"
+                  />
+                </DialogContent>
+              </Dialog>
+              {event.location?.calculatedLocation}
+            </div>
+          ) : (
+            event.driverLocationDescription
           )}
-          {event.location?.calculatedLocation}
         </div>
+      </TableCell>
+      <TableCell className="text-muted-foreground text-xs">
+        {event.recordStatus?.id}
       </TableCell>
       <TableCell className="text-muted-foreground text-xs">
         {ORIGIN_MAP[event.recordOrigin?.id]}

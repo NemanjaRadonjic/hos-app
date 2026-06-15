@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -8,20 +8,42 @@ import {
 } from "@/components/ui/popover";
 import { ChevronDownIcon } from "lucide-react";
 import { DateTime } from "luxon";
+import { cn } from "@/lib/utils";
 
 type Props = {
   value: DateTime;
   onChange: (dt: DateTime) => void;
+  maxDate?: string;
+  className: string;
 };
 
-export default function DatePicker({ value, onChange }: Props) {
+export default function DatePicker({
+  value,
+  onChange,
+  maxDate,
+  className,
+}: Props) {
   const [open, setOpen] = useState(false);
+
   const [month, setMonth] = useState(value.toJSDate());
+
+  useEffect(() => {
+    if (!open) return;
+
+    setMonth(
+      maxDate
+        ? DateTime.fromFormat(maxDate, "yyyy/MM/dd").toJSDate()
+        : value.toJSDate(),
+    );
+  }, [open, maxDate, value]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="justify-between font-normal">
+        <Button
+          variant="outline"
+          className={cn("justify-between font-normal", className && className)}
+        >
           {value.toFormat("MM/dd/yyyy")}
           <ChevronDownIcon />
         </Button>
@@ -33,6 +55,27 @@ export default function DatePicker({ value, onChange }: Props) {
           month={month}
           selected={value.toJSDate()}
           onMonthChange={(d) => setMonth(d)}
+          disabled={(date) => {
+            if (!maxDate) return false;
+
+            const max = DateTime.fromFormat(maxDate, "yyyy/MM/dd").startOf(
+              "day",
+            );
+
+            const day = DateTime.fromObject({
+              year: date.getFullYear(),
+              month: date.getMonth() + 1,
+              day: date.getDate(),
+            }).startOf("day");
+
+            const today = DateTime.now().startOf("day");
+
+            if (max.hasSame(today, "day")) {
+              return day >= max;
+            }
+
+            return day > max;
+          }}
           onSelect={(date) => {
             if (!date) return;
 

@@ -1,8 +1,6 @@
-import type { HosEvent } from "@/lib/types";
+import type { EventFamily } from "../../helpers/types";
 
-export type Family = "BASIC" | "CERT" | "AUTH" | "DIAG";
-
-export function getFamily(status: string): Family {
+export function getEventFamily(status: string): EventFamily {
   if (
     status.startsWith("DS_") ||
     status.startsWith("ENG_") ||

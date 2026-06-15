@@ -13,49 +13,55 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { Vehicle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { FaTruckFront } from "react-icons/fa6";
+import { FieldError } from "../field-error";
 
-export default function VehicleSelect({ vehicles, value, onChange }) {
+export default function EldSelect({ elds, value, onChange, disabled, error }) {
   const [open, setOpen] = useState(false);
 
-  const selected = vehicles.find((v: Vehicle) => v.id === value);
+  const selected = elds.find((e) => e.id === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <div className="flex gap-2">
-        <Label className="flex w-28 items-center gap-2">Vehicle</Label>
+        <Label className="flex w-28 items-center gap-2">ELD</Label>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="w-40 justify-start">
-            {selected?.name ?? "Select vehicle"}
-          </Button>
+          <div className="relative flex-1">
+            <Button
+              disabled={disabled}
+              variant="outline"
+              className={cn("w-full justify-start", error && "border-red-500")}
+            >
+              {selected?.sn ?? "None"}
+            </Button>
+            <FieldError error={error} />
+          </div>
         </PopoverTrigger>
 
-        <PopoverContent className="w-72 p-0">
+        <PopoverContent align="start" className="p-0">
           <Command className="overflow-y-auto">
-            <CommandInput placeholder="Search vehicle..." />
+            <CommandInput placeholder="Search elds..." />
             <CommandList onWheel={(e) => e.stopPropagation()}>
-              <CommandEmpty>No vehicle found</CommandEmpty>
+              <CommandEmpty>No elds found</CommandEmpty>
 
               <CommandGroup>
-                {vehicles.map((v) => (
+                {elds.map((e) => (
                   <CommandItem
-                    key={v.id}
-                    value={v.name}
+                    key={e.id}
+                    value={e.sn}
                     onSelect={() => {
-                      onChange(v.id);
+                      onChange(e.id);
                       setOpen(false);
                     }}
                   >
-                    <FaTruckFront />
-                    {v.name}
+                    {e.sn}
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        value === v.id ? "opacity-100" : "opacity-0",
+                        value === e.id ? "opacity-100" : "opacity-0",
                       )}
                     />
                   </CommandItem>

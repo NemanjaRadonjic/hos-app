@@ -5,12 +5,15 @@ import { Clock } from "lucide-react";
 import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { getTokenPayload } from "@/lib/helpers";
+import { CommitDialog } from "./commit-dialog";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
   resetSelection: () => void;
   onApply: (deltaMs: number) => void;
 };
+
+type CommitPhase = "confirm" | "saving" | "success" | "error";
 
 export default function ControlBar({
   selectedIds,
@@ -19,13 +22,24 @@ export default function ControlBar({
   selectDuration,
   transactionStatus,
 }: ControlBarProps) {
+  const { commit, reset, status, getSaveStats } = useTransactionContext();
+
+  const [commitOpen, setCommitOpen] = useState(false);
+  const [commitPhase, setCommitPhase] = useState<CommitPhase>("confirm");
+  const [commitProgress, setCommitProgress] = useState({
+    done: 0,
+    total: 0,
+    success: 0,
+    failed: 0,
+  });
+
+  const stats = getSaveStats();
+
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
   const [seconds, setSeconds] = useState("");
 
   const count = selectedIds.size;
-
-  const { commit, reset } = useTransactionContext();
 
   const handleSubmit = () => {
     const h = parseInt(hours || "0", 10);
@@ -95,14 +109,46 @@ export default function ControlBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button disabled={status === "idle"} onClick={commit}>
-          {status === "saving" ? "Saving..." : "Finish"}
+        <Button
+          disabled={status === "idle"}
+          onClick={() => {
+            setCommitPhase("confirm");
+            setCommitOpen(true);
+          }}
+        >
+          Finish
         </Button>
 
         <Button variant="outline" disabled={status === "idle"} onClick={reset}>
           Reset
         </Button>
       </div>
+      <CommitDialog
+        open={commitOpen}
+        onOpenChange={setCommitOpen}
+        phase={commitPhase}
+        stats={stats}
+        progress={commitProgress}
+        onConfirm={async () => {
+          setCommitPhase("saving");
+
+          setCommitProgress({
+            done: 0,
+            total: stats.totalRequests,
+            success: 0,
+            failed: 0,
+          });
+
+          const result = await commit(setCommitProgress);
+
+          if (!result) {
+            setCommitPhase("error");
+            return;
+          }
+
+          setCommitPhase(result.failed.length > 0 ? "error" : "success");
+        }}
+      />
     </div>
   );
 }

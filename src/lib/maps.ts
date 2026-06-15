@@ -1,26 +1,79 @@
 // type DutyStatusKey = "DS_OFF" | "DS_ON" | "DS_D" | "DS_SB";
 
-export const STATUS_MAP: Record<string, string> = {
-  DS_OFF: "Off Duty",
+export const STATE_NAMES: Record<string, string> = {
+  AL: "Alabama",
+  AK: "Alaska",
+  AZ: "Arizona",
+  AR: "Arkansas",
+  CA: "California",
+  CO: "Colorado",
+  CT: "Connecticut",
+  DE: "Delaware",
+  FL: "Florida",
+  GA: "Georgia",
+  HI: "Hawaii",
+  ID: "Idaho",
+  IL: "Illinois",
+  IN: "Indiana",
+  IA: "Iowa",
+  KS: "Kansas",
+  KY: "Kentucky",
+  LA: "Louisiana",
+  ME: "Maine",
+  MD: "Maryland",
+  MA: "Massachusetts",
+  MI: "Michigan",
+  MN: "Minnesota",
+  MS: "Mississippi",
+  MO: "Missouri",
+  MT: "Montana",
+  NE: "Nebraska",
+  NV: "Nevada",
+  NH: "New Hampshire",
+  NJ: "New Jersey",
+  NM: "New Mexico",
+  NY: "New York",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  OH: "Ohio",
+  OK: "Oklahoma",
+  OR: "Oregon",
+  PA: "Pennsylvania",
+  RI: "Rhode Island",
+  SC: "South Carolina",
+  SD: "South Dakota",
+  TN: "Tennessee",
+  TX: "Texas",
+  UT: "Utah",
+  VT: "Vermont",
+  VA: "Virginia",
+  WA: "Washington",
+  WV: "West Virginia",
+  WI: "Wisconsin",
+  WY: "Wyoming",
+};
+
+export const STATUS_MAP = {
+  DS_OFF: "Off Duty", // DONE
   DS_WT: "Off Duty (Waiting Time)",
-  DS_ON: "On Duty",
-  DS_D: "Driving",
-  DS_SB: "Sleeper",
-  DR_LOGIN: "Login",
-  DR_LOGOUT: "Logout",
-  MALF_LOGGED: "Engine synchronization compliance malfunction",
-  MALF_CLEARED: "Engine synchronization compliance",
-  DIAG_LOGGED: "Unidentified driving records data diagnostic",
-  DIAG_CLEARED: "Power data diagnostic (cleared)",
-  LOG_NORMAL_PRECISION: "Intermediate w/ CLP",
+  DS_ON: "On Duty", // DONE
+  DS_D: "Driving", // DONE
+  DS_SB: "Sleeper", // DONE
+  DR_LOGIN: "Login", // DONE
+  DR_LOGOUT: "Logout", // DONE
+  MALF_LOGGED: "Engine synchronization compliance malfunction", // DONE
+  MALF_CLEARED: "Engine synchronization compliance", // DONE
+  DIAG_LOGGED: "Unidentified driving records data diagnostic", // DONE
+  DIAG_CLEARED: "Power data diagnostic (cleared)", // DONE
+  LOG_NORMAL_PRECISION: "Intermediate w/ CLP", // DONE
   LOG_REDUCED_PRECISION: "Intermediate w/ RLP",
-  ENG_UP_NORMAL: "Engine Power-up w/ CLP",
+  ENG_UP_NORMAL: "Engine Power-up w/ CLP", // DONE
   ENG_UP_REDUCED: "Engine Power-up w/ RLP",
-  ENG_DOWN_NORMAL: "Engine Shut-down w/ CLP",
+  ENG_DOWN_NORMAL: "Engine Shut-down w/ CLP", // DONE
   ENG_DOWN_REDUCED: "Engine Shut-down w/ RLP",
-  DR_IND_PC: "Personal Use",
+  DR_IND_PC: "Personal Use", // DONE
   DR_IND_YM: "Yard Moves",
-  DR_CERT_1: "Certification (1)",
+  DR_CERT_1: "Certification (1)", // DONE
   DR_CERT_2: "Certification (2)",
   DR_CERT_3: "Certification (3)",
   DR_CERT_4: "Certification (4)",
@@ -29,7 +82,9 @@ export const STATUS_MAP: Record<string, string> = {
   DR_CERT_7: "Certification (7)",
   DR_CERT_8: "Certification (8)",
   DR_CERT_9: "Certification (>=9)",
-};
+} as const;
+
+export type EventCode = keyof typeof STATUS_MAP;
 
 export const ORIGIN_MAP = {
   DRIVER: "Driver",
