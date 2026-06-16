@@ -332,6 +332,9 @@ export type HosEvent = {
   accumulatedVehicleMiles?: number;
   elapsedEngineHours?: number;
   distSinceLastValidCoords?: number;
+
+  // inspection
+  i?: boolean;
 };
 
 type ServerFields =

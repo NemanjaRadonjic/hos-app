@@ -1,4 +1,3 @@
-import { useTransaction } from "@/lib/hooks/useTransaction";
 import DriverSelect from "./driver-select";
 import { useParams } from "@tanstack/react-router";
 import { useDriversData } from "@/lib/hooks/useDriversData";
@@ -8,6 +7,8 @@ import { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
+import { X } from "lucide-react";
+import { MdClear } from "react-icons/md";
 
 export const ShippingForm = ({ selectedDay, closeDialog }) => {
   const { driverId } = useParams({
@@ -55,6 +56,13 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
   };
   return (
     <div className="flex flex-col gap-6">
+      <div className="border-b pb-4">
+        <h2 className="text-lg font-semibold">Driver Log Details</h2>
+
+        <p className="text-muted-foreground text-sm">
+          {selectedDay.toFormat("EEEE, MMMM d, yyyy")}
+        </p>
+      </div>
       <div className="flex flex-col gap-2">
         <Label>Co driver:</Label>
         <DriverSelect
@@ -87,10 +95,26 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
       </div>
       <div className="flex flex-col gap-2">
         <Label>Signature</Label>
-        <Input
-          value={signature}
-          onChange={(e) => setSignature(e.target.value)}
-        />
+
+        <div className="relative">
+          <Input
+            value={signature ?? ""}
+            onChange={(e) => setSignature(e.target.value)}
+            className="pr-10"
+          />
+
+          {signature && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setSignature(undefined)}
+              className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2"
+            >
+              <MdClear className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <Button className="cursor-pointer" onClick={onSubmit}>

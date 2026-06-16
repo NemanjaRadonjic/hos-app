@@ -24,15 +24,27 @@ import {
   upsertHosEvent,
 } from "../api";
 import { sortEvents } from "../helpers/sort-events";
+import { findNearestSignature } from "./helpers/find-nearest-signature";
+import { toast } from "sonner";
+import { findCertAnchorEvent } from "./helpers/find-cert-anchor";
+import { isDayCertified } from "./helpers/check-date-certified";
+import type { CertHosEvent } from "@/components/LogEvent/helpers/types";
+import { runQueue, type QueueItem } from "../helpers/api-helpers";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
 
-type CommitProgress = {
+export type CommitProgress = {
   done: number;
   total: number;
   success: number;
   failed: number;
   current?: string;
+  retrying?: {
+    id: string;
+    label: string;
+    attempt: number;
+    delayMs: number;
+  } | null;
 };
 
 type CommitResult = {
@@ -64,9 +76,9 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const [events, setEvents] = useState<HosEventPayload[]>([]);
   console.log({ events });
   // dailyLogEdits is a sparse delta — only the fields that changed per log id
-  const [dailyLogEdits, setDailyLogEdits] = useState<
-    Record<string, Partial<DailyLog>>
-  >({});
+  const [dailyLogEdits, setDailyLogEdits] = useState<Record<string, DailyLog>>(
+    {},
+  );
   console.log({ dailyLogEdits });
 
   // ─── sync events from cache into local state ──────────────────────────────
@@ -129,6 +141,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   };
 
   const deleteEvent = (eventId: string) => {
+    setStatus("pending");
     setEvents((prev) => prev.filter((e) => e._id !== eventId));
   };
 
@@ -153,27 +166,30 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     deltaMs: number;
   }) => {
     setStatus("pending");
+
     setEvents((prev) =>
-      prev.map((e) => {
-        if (!selectedIds.has(e._id)) return e;
+      sortEvents(
+        prev.map((e) => {
+          if (!selectedIds.has(e._id)) return e;
 
-        const newTimestamp = e.eventTime.timestamp + deltaMs;
+          const newTimestamp = e.eventTime.timestamp + deltaMs;
 
-        const newDate =
-          DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
+          const newDate =
+            DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
 
-        return {
-          ...e,
-          eventTime: {
-            ...e.eventTime,
-            timestamp: newTimestamp,
-            logDate: {
-              ...e.eventTime.logDate,
-              date: newDate,
+          return {
+            ...e,
+            eventTime: {
+              ...e.eventTime,
+              timestamp: newTimestamp,
+              logDate: {
+                ...e.eventTime.logDate,
+                date: newDate,
+              },
             },
-          },
-        };
-      }),
+          };
+        }),
+      ),
     );
   };
 
@@ -353,87 +369,68 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
 
-    const total =
-      changedLogs.length * 2 + changedEvents.length + deletedEventIds.length;
-
-    let done = 0;
-    let success = 0;
-    let failedCount = 0;
-
-    const failed: string[] = [];
-
-    const report = (current?: string) => {
-      onProgress?.({
-        done,
-        total,
-        success,
-        failed: failedCount,
-        current,
-      });
-    };
-
-    report();
-
-    const run = async (id: string, fn: () => Promise<void>) => {
-      try {
-        await fn();
-        success++;
-      } catch {
-        failedCount++;
-        failed.push(id);
-      } finally {
-        done++;
-        report(id);
-      }
-    };
+    const items: QueueItem[] = [];
 
     for (const log of changedLogs) {
       const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
 
-      await run(log._id, async () => {
-        await upsertDailyLog(log._id, log);
-      });
+      items.push({
+        id: log._id,
+        label: `Log ${log.logDate.date}`,
+        run: async () => {
+          await upsertDailyLog(log._id, log);
 
-      await run(summaryId, async () => {
-        const existingSummary = getSummary(log.logDate.date);
+          const existingSummary = getSummary(log.logDate.date);
 
-        const summary = existingSummary
-          ? {
-              ...existingSummary,
-              hasForms: true,
-              isSigned: Boolean(log.form.signature),
-            }
-          : buildDailyLogSummary({
-              id: summaryId,
-              dId: driver.dId,
-              userId: driver.id,
-              date: log.logDate.date,
-              isSigned: Boolean(log.form.signature),
-            });
+          const summary = existingSummary
+            ? {
+                ...existingSummary,
+                hasForms: true,
+                isSigned: Boolean(log.form.signature),
+              }
+            : buildDailyLogSummary({
+                id: summaryId,
+                dId: driver.dId,
+                userId: driver.id,
+                date: log.logDate.date,
+                isSigned: Boolean(log.form.signature),
+              });
 
-        await upsertDailyLogSummary(summaryId, summary);
+          await upsertDailyLogSummary(summaryId, summary);
+        },
       });
     }
 
     for (const event of changedEvents) {
-      await run(event._id, async () => {
-        await upsertHosEvent(event._id, event);
+      items.push({
+        id: event._id,
+        label: `Event ${event._id}`,
+        run: () => upsertHosEvent(event._id, event),
       });
     }
 
     for (const id of deletedEventIds) {
-      await run(id, async () => {
-        await deleteHosEvent(id);
+      items.push({
+        id,
+        label: `Delete ${id}`,
+        run: () => deleteHosEvent(id),
       });
     }
 
-    if (failed.length > 0) {
-      setStatus("error");
-
-      return {
-        failed,
-      };
-    }
+    await runQueue({
+      items,
+      concurrency: 2,
+      onProgress: (p) => {
+        onProgress?.({
+          done: p.done,
+          total: p.total,
+          success: p.success,
+          failed: p.failed,
+          current: p.current,
+          retrying: p.retrying,
+        });
+      },
+    });
 
     setStatus("idle");
     setDailyLogEdits({});
@@ -443,7 +440,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     });
 
     return {
-      failed,
+      failed: [],
     };
   };
 
@@ -475,6 +472,89 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     setDailyLogEdits({});
   };
 
+  // FUNCTIONS ////////////////////////////////////////////////////////////////
+
+  const fixCert = (selectedDay: DateTime) => {
+    const logDate = selectedDay.toFormat("yyyy/MM/dd");
+
+    if (selectedDay.hasSame(DateTime.now(), "day")) {
+      toast.error("Current day cannot be certified yet.");
+      return;
+    }
+
+    if (isDayCertified(events, logDate)) {
+      toast.error("This day is already certified.");
+      return;
+    }
+
+    const anchorEvent = findCertAnchorEvent({
+      events,
+      selectedDay,
+    });
+
+    if (!anchorEvent) {
+      toast.error("No future status event found to certify this day.");
+      return;
+    }
+
+    const dailyLog = getDailyLog(logDate);
+    const signature = findNearestSignature(data?.dailyLogsData ?? [], logDate);
+
+    if (!dailyLog?._id || !signature) {
+      toast.error("No signature found for this log.");
+      return;
+    }
+
+    const certTs = anchorEvent.eventTime.timestamp + 12_000;
+
+    const {
+      eld,
+      location,
+      recordStatus,
+      recordOrigin,
+      totalVehicleMiles,
+      totalEngineHours,
+      eventComment,
+      ...base
+    } = anchorEvent;
+
+    const certEvent: HosEventPayload = {
+      ...base,
+
+      _id: generateHosEventId(),
+
+      seqId: (parseInt(anchorEvent.seqId, 16) + 1).toString(16),
+
+      eventCode: {
+        id: "DR_CERT_1",
+      },
+
+      eventTime: {
+        ...anchorEvent.eventTime,
+        timestamp: certTs,
+      },
+
+      certifiedRecordLogDate: {
+        date: logDate,
+        logStartOffset: anchorEvent.eventTime.logDate.logStartOffset ?? 0,
+        timeZone: anchorEvent.eventTime.logDate.timeZone,
+      },
+    };
+
+    setEvents((prev) => sortEvents([...prev, certEvent]));
+
+    updateDailyLog(dailyLog._id, {
+      signature,
+    });
+
+    setStatus("pending");
+  };
+
+  const dailyLogs = [
+    ...(data?.dailyLogsData ?? []).filter((log) => !dailyLogEdits[log._id]),
+    ...Object.values(dailyLogEdits),
+  ];
+
   return {
     status,
     // per-day selectors
@@ -493,6 +573,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     // all summaries if you need to iterate (e.g. calendar view)
     summaries: data?.dailySummariesData ?? [],
+    dailyLogs,
 
     // fetch controls
     fetchPreviousRange,
@@ -504,5 +585,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     reset,
     updateDailyLog,
     commit,
+
+    // functions
+    fixCert,
   };
 };

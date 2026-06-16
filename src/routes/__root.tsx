@@ -4,6 +4,7 @@ import api from "../lib/axios";
 import Navbar from "@/components/navbar";
 import { useCompany } from "@/lib/hooks/useCompany";
 import { supabase } from "@/lib/supabase";
+import { Toaster } from "sonner";
 
 const RootComponent = () => {
   useCompany();
@@ -13,6 +14,7 @@ const RootComponent = () => {
       {/* <Navbar /> */}
       <main className="min-h-0 flex-1 overflow-auto">
         <Outlet />
+        <Toaster />
       </main>
     </div>
   );

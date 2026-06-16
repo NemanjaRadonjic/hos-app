@@ -1,20 +1,14 @@
-import {
-  FaFileCircleXmark,
-  FaFileSignature,
-  FaTrailer,
-  FaTruckFront,
-} from "react-icons/fa6";
+import { FaTrailer, FaTruckFront } from "react-icons/fa6";
 import { IoDocumentText } from "react-icons/io5";
 import { Badge } from "../ui/badge";
 import { MdEdit } from "react-icons/md";
 import { BiSolidCertification, BiSolidError } from "react-icons/bi";
 import { TbClipboardCheckFilled, TbClipboardXFilled } from "react-icons/tb";
-import { FaExclamationTriangle } from "react-icons/fa";
+
 import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { ShippingForm } from "./shipping-form";
 import { useState } from "react";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
-import checkCert from "@/lib/helpers/check-cert";
 
 type DriverFormProps = {};
 
@@ -22,16 +16,27 @@ export default function DriverForm({
   vehicles,
   currentDailySummary,
   selectedDay,
+  diagnostics,
 }: DriverFormProps) {
   const [open, setOpen] = useState(false);
   const { events, updateDailyLog, getDailyLog } = useTransactionContext();
   const dailyLog = getDailyLog(selectedDay.toFormat("yyyy/MM/dd"));
   const form = dailyLog?.form;
-  const isSigned = checkCert(
-    events,
-    selectedDay.toFormat("yyyy/MM/dd"),
-    !!form?.signature && currentDailySummary?.isSigned,
+  const dayDiagnostics = diagnostics.byDate[selectedDay.toFormat("yyyy/MM/dd")];
+  console.log({ dayDiagnostics });
+  const certIssue = dayDiagnostics?.issues.find((issue) =>
+    [
+      "MISSING_CERTIFICATION",
+      "MISSING_SIGNATURE",
+      "INVALID_CERTIFICATION_TIME",
+      "CURRENT_DAY_CERTIFICATION",
+      "CURRENT_DAY_SIGNATURE",
+      "DUPLICATE_CERTIFICATION",
+    ].includes(issue.code),
   );
+
+  const certError = certIssue?.message ?? null;
+  const hasCert = dayDiagnostics?.derived.isCertified ?? false;
   return (
     <div className="flex flex-1 gap-4">
       <div className="flex items-center gap-2">
@@ -123,15 +128,15 @@ export default function DriverForm({
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-3">
-          {!isSigned.error ? (
-            <Badge variant="success">
-              <BiSolidCertification /> Signed
-            </Badge>
-          ) : (
+          {certError ? (
             <Badge variant="error">
-              <BiSolidCertification /> {isSigned.error}
+              <BiSolidCertification /> {certError}
             </Badge>
-          )}
+          ) : hasCert ? (
+            <Badge variant="success">
+              <BiSolidCertification /> Certified
+            </Badge>
+          ) : null}
         </div>
       </div>
     </div>

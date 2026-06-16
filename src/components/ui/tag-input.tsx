@@ -45,6 +45,26 @@ export const TagInput = ({
       removeTag(value[value.length - 1]);
     }
   };
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [copiedTag, setCopiedTag] = useState<string | null>(null);
+  const copyTag = async (tag: string) => {
+    await navigator.clipboard.writeText(tag);
+    setCopiedTag(tag);
+
+    window.setTimeout(() => {
+      setCopiedTag((current) => (current === tag ? null : current));
+    }, 1000);
+  };
+  const moveTag = (from: number, to: number) => {
+    if (from === to) return;
+
+    const next = [...value];
+    const [removed] = next.splice(from, 1);
+    next.splice(to, 0, removed);
+
+    onChange(next);
+  };
+
   const variant =
     type === "trailer"
       ? "secondary"
@@ -66,21 +86,57 @@ export const TagInput = ({
       )}
       onClick={() => inputRef.current?.focus()}
     >
-      {value.map((tag) => (
-        <Badge key={tag} variant={variant} className="gap-1 pr-1 text-sm">
-          {Icon && <Icon className="shrink-0" />}
-          {tag}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              removeTag(tag);
+      {value.map((tag, index) => (
+        <div className="relative">
+          {copiedTag === tag && (
+            <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 absolute -top-8 left-1/2 z-50 -translate-x-1/2 rounded-md bg-black px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-md duration-150">
+              Copied!
+            </div>
+          )}
+          <Badge
+            key={tag}
+            variant={variant}
+            draggable
+            onDragStart={() => setDragIndex(index)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => {
+              if (dragIndex !== null) {
+                moveTag(dragIndex, index);
+                setDragIndex(null);
+              }
             }}
-            className="hover:text-destructive ml-1"
+            className="cursor-grab gap-1 pr-1 text-sm active:cursor-grabbing"
           >
-            <MdRemoveCircle className="h-4 w-4 cursor-pointer" />
-          </button>
-        </Badge>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyTag(tag);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                copyTag(tag);
+              }}
+              className="flex cursor-copy items-center gap-1"
+              title="Click to copy"
+            >
+              {Icon && <Icon className="shrink-0" />}
+              <span>{tag}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeTag(tag);
+              }}
+              className="hover:text-destructive ml-1"
+            >
+              <MdRemoveCircle className="h-4 w-4 cursor-pointer" />
+            </button>
+          </Badge>
+        </div>
       ))}
       <input
         ref={inputRef}

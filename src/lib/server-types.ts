@@ -140,6 +140,8 @@ export type DailyLog = {
       };
     };
 
+    signature?: string;
+
     trailers: string[];
 
     vehicles: string[];

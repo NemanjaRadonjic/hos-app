@@ -6,11 +6,16 @@ import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { getTokenPayload } from "@/lib/helpers";
 import { CommitDialog } from "./commit-dialog";
+import { BiCertification } from "react-icons/bi";
+import { FaCertificate } from "react-icons/fa6";
+import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
+import type { CommitProgress } from "@/lib/hooks/useTransaction";
+import { LogCheck } from "./log-check-dialog";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
   resetSelection: () => void;
-  onApply: (deltaMs: number) => void;
+  diagnostics: LogDiagnosticsState;
 };
 
 type CommitPhase = "confirm" | "saving" | "success" | "error";
@@ -21,16 +26,22 @@ export default function ControlBar({
   updateEventsTimestamp,
   selectDuration,
   transactionStatus,
+  selectedDay,
+  setSelectedDay,
+  setFocusedId,
+  diagnostics,
 }: ControlBarProps) {
-  const { commit, reset, status, getSaveStats } = useTransactionContext();
+  const { commit, reset, status, getSaveStats, fixCert } =
+    useTransactionContext();
 
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitPhase, setCommitPhase] = useState<CommitPhase>("confirm");
-  const [commitProgress, setCommitProgress] = useState({
+  const [commitProgress, setCommitProgress] = useState<CommitProgress>({
     done: 0,
     total: 0,
     success: 0,
     failed: 0,
+    retrying: null,
   });
 
   const stats = getSaveStats();
@@ -103,12 +114,23 @@ export default function ControlBar({
           max={59}
           allowNegative
         />
-        <Button size="sm" onClick={handleSubmit}>
-          Apply
+        <Button onClick={handleSubmit}>Apply</Button>
+      </div>
+
+      <div>
+        <Button onClick={() => fixCert(selectedDay)}>
+          <FaCertificate className="size-3" />
+          Fix Cert
         </Button>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <LogCheck
+          setSelectedDay={setSelectedDay}
+          setFocusedId={setFocusedId}
+          diagnostics={diagnostics}
+        />
+
         <Button
           disabled={status === "idle"}
           onClick={() => {
@@ -137,6 +159,7 @@ export default function ControlBar({
             total: stats.totalRequests,
             success: 0,
             failed: 0,
+            retrying: null,
           });
 
           const result = await commit(setCommitProgress);
@@ -148,6 +171,7 @@ export default function ControlBar({
 
           setCommitPhase(result.failed.length > 0 ? "error" : "success");
         }}
+        diagnostics={diagnostics}
       />
     </div>
   );

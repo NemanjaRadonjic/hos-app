@@ -27,6 +27,7 @@ import {
 import { Button } from "../ui/button";
 import { SpaceIcon } from "lucide-react";
 import type { ProviderViolation } from "@/lib/types";
+import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 
 interface LogHeadProps {
   value: DateTime<true> | DateTime<false>;
@@ -38,6 +39,7 @@ interface LogHeadProps {
   totalMiles: number;
   vehicles: string[];
   violations: Violation[];
+  diagnostics: LogDiagnosticsState;
 }
 
 const LogHead = ({
@@ -48,6 +50,7 @@ const LogHead = ({
   totalMiles,
   vehicles,
   violations,
+  diagnostics,
 }: LogHeadProps) => {
   const { driverId } = useParams({
     from: "/drivers/$driverId",
@@ -103,6 +106,7 @@ const LogHead = ({
         vehicles={vehicles}
         currentDailySummary={selectedDaySummary}
         selectedDay={selectedDay}
+        diagnostics={diagnostics}
       />
       <Popover>
         <PopoverTrigger asChild>

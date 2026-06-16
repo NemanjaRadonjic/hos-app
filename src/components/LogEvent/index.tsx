@@ -1,24 +1,20 @@
 import { Checkbox } from "../ui/checkbox";
 import { TableCell, TableRow } from "../ui/table";
 import { DateTime, Duration } from "luxon";
-import {
-  EVENT_BADGE_COLORS,
-  mainEventCodes,
-  ORIGIN_MAP,
-  STATUS_MAP,
-  TZ_MAP,
-} from "@/lib/maps";
+import { ORIGIN_MAP, TZ_MAP } from "@/lib/maps";
 import { Badge } from "../ui/badge";
 import type { HosEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { getNoteIcons } from "@/lib/helpers";
 import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
-import { MapPin } from "lucide-react";
 import { FaMapMarkedAlt } from "react-icons/fa";
 import EventCode from "./event-code";
 import { memo } from "react";
 import type { EventInfo } from "@/routes/drivers/$driverId";
+import { MdError } from "react-icons/md";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { BiError } from "react-icons/bi";
 
 interface LogEventProps {
   event: HosEvent;
@@ -81,6 +77,8 @@ const LogEvent = ({
         focused
           ? "bg-indigo-100 shadow-sm hover:bg-blue-200 dark:bg-blue-900/70"
           : "hover:bg-muted/50",
+        // eventInfo.hasError && "bg-red-100",
+        event.i && "bg-muted hover:bg-muted",
       )}
       onClick={() => {
         setFocusedId(event._id);
@@ -133,10 +131,10 @@ const LogEvent = ({
           )}
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-muted-foreground text-center text-xs">
         {event.recordStatus?.id}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-muted-foreground text-center text-xs">
         {ORIGIN_MAP[event.recordOrigin?.id]}
       </TableCell>
       <TableCell className="relative text-center text-sm tabular-nums">
@@ -166,8 +164,42 @@ const LogEvent = ({
           </Badge>
         )}
       </TableCell>
-      <TableCell className="text-sm">{event.vehicle?.name}</TableCell>
-      <TableCell className="text-sm">{parseInt(event.seqId, 16)}</TableCell>
+      <TableCell>
+        {eventInfo.hasError && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <BiError size={18} className="fill-red-500" />
+            </TooltipTrigger>
+
+            <TooltipContent
+              side="top"
+              className="border-red-500/30 bg-red-950 text-red-50"
+            >
+              <div className="my-1 min-w-[250px]">
+                <div className="mb-2 flex items-center gap-2 font-medium text-red-300">
+                  <BiError className="h-4 w-4" />
+                  Log validation error
+                </div>
+
+                <ul className="space-y-1 text-sm">
+                  {eventInfo.issues.map((issue) => (
+                    <li
+                      key={issue.eventId}
+                      className="flex items-center justify-center gap-2"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                      <span>{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </TableCell>
+      <TableCell className="text-xs">{event.eld?.sn?.slice(-4)}</TableCell>
+      <TableCell className="text-xs">{event.vehicle?.name}</TableCell>
+      <TableCell className="text-xs">{parseInt(event.seqId, 16)}</TableCell>
     </TableRow>
   );
 };

@@ -26,13 +26,15 @@ import {
   TransactionContext,
   useTransactionContext,
 } from "@/lib/hooks/TransactionContext";
-import checkCert from "@/lib/helpers/check-cert";
 import { EditEventModal } from "@/components/LogEvent/EditForm";
+import { buildLogCheck, type LogIssue } from "@/lib/log-check";
 
 export type EventInfo = {
   duration: number | null;
   odoDelta: number | null;
   engHoursDelta: number | null;
+  issues: LogIssue[];
+  hasError: boolean;
 };
 
 type EnrichedEvent = {
@@ -78,6 +80,15 @@ function DriverPage() {
 
   const { clocks, violations } = hosEngine(events);
   console.log({ clocks, violations });
+  const diagnostics = useMemo(
+    () =>
+      buildLogCheck({
+        events,
+        dailyLogs: transaction.dailyLogs ?? [],
+      }),
+    [events, transaction.dailyLogs],
+  );
+  console.log({ diagnostics });
 
   const toggleSelectedId = (id: string) => {
     setSelectedIds((prev) => {
@@ -196,6 +207,17 @@ function DriverPage() {
   }, [selectedIds, events]);
 
   // const violations = useMemo(() => checkViolations(events), [events]);
+  const issuesByEventId = useMemo(() => {
+    const map = new Map<string, LogIssue[]>();
+
+    for (const issue of diagnostics.issues) {
+      if (!issue.eventId) continue;
+
+      map.set(issue.eventId, [...(map.get(issue.eventId) ?? []), issue]);
+    }
+
+    return map;
+  }, [diagnostics.issues]);
 
   const enrichedEventList: EnrichedEvent[] = useMemo(() => {
     return eventList.map((event, i) => {
@@ -228,16 +250,20 @@ function DriverPage() {
           ? event.totalEngineHours - prev.totalEngineHours
           : null;
 
+      const issues = issuesByEventId.get(event._id) ?? [];
+
       return {
         event,
         info: {
           duration,
           odoDelta,
           engHoursDelta,
+          issues,
+          hasError: issues.some((issue) => issue.severity === "error"),
         },
       };
     });
-  }, [eventList]);
+  }, [eventList, issuesByEventId]);
 
   if (!driver) return <div>Loading</div>;
 
@@ -252,6 +278,7 @@ function DriverPage() {
           totalMiles={totalMiles}
           vehicles={vehicles}
           violations={violations}
+          diagnostics={diagnostics}
         />
         <ELDGraph
           selectedDay={selectedDay}
@@ -289,11 +316,13 @@ function DriverPage() {
                   <TableHead className="w-20">Duration</TableHead>
                   <TableHead className="w-80">Event</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead className="w-20">Status</TableHead>
-                  <TableHead className="w-20">Origin</TableHead>
-                  <TableHead className="w-40 text-center">Odometer</TableHead>
+                  <TableHead className="w-16 text-center">Status</TableHead>
+                  <TableHead className="w-16 text-center">Origin</TableHead>
+                  <TableHead className="w-20 text-center">Odometer</TableHead>
                   <TableHead className="w-40 text-center">Eng. Hours</TableHead>
                   <TableHead className="w-52">Note</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-16">ELD</TableHead>
                   <TableHead className="w-16">Vehicle</TableHead>
                   <TableHead className="w-16">ID</TableHead>
                 </TableRow>
@@ -333,6 +362,10 @@ function DriverPage() {
             updateEventsTimestamp={updateEventsTimestamp}
             selectDuration={selectDuration}
             transactionStatus={status}
+            selectedDay={selectedDay}
+            setSelectedDay={setSelectedDay}
+            setFocusedId={setFocusedId}
+            diagnostics={diagnostics}
           />
         </div>
         <EditEventModal

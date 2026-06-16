@@ -53,7 +53,7 @@ export function validateDraft(draft: Draft): ValidationErrors {
   }
 
   if (family === "CERT") {
-    if (certifiedRecordLogDate!.date >= eventTime.logDate.date) {
+    if (certifiedRecordLogDate!.date > eventTime.logDate.date) {
       errors.certifiedRecordLogDate = "You can only certify past days";
     }
   }

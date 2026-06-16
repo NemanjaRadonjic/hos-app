@@ -3,16 +3,12 @@ import { getTokenPayload } from "../helpers";
 import { mainEventCodes } from "../maps";
 import type {
   Company,
-  DailyLog,
   DailyLogBase,
   DailyLogSummaryBase,
-  DriverInfo,
   HosEvent,
-  User,
 } from "../types";
 import type { Segment } from "./segments";
 import { customAlphabet } from "nanoid";
-import { useQueryClient } from "@tanstack/react-query";
 import type { DriverSimplified } from "../hooks/useDriversData";
 
 export function isRest(seg: Segment) {
@@ -37,7 +33,7 @@ export function msToHoursMinutes(ms: number): string {
 }
 
 export function isActiveEvent(event: HosEvent) {
-  return event.recordStatus.id === "ACTIVE";
+  return event.recordStatus?.id === "ACTIVE";
 }
 
 export function isDutyEvent(event: HosEvent) {
