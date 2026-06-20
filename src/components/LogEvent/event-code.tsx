@@ -130,7 +130,14 @@ export default function EventCode({
 
         <ContextMenuContent>
           <ContextMenuLabel>Main</ContextMenuLabel>
-          <ContextMenuItem onClick={() => setEditingEvent(event)}>
+          <ContextMenuItem
+            onClick={() => {
+              console.time("open-edit-total");
+              console.time("setEditingEvent");
+              setEditingEvent(event);
+              console.timeEnd("setEditingEvent");
+            }}
+          >
             <MdEditDocument />
             Edit
           </ContextMenuItem>

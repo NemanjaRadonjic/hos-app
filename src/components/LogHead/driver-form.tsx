@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { ShippingForm } from "./shipping-form";
 import { useState } from "react";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
+import type { LogIssue } from "@/lib/log-check";
 
 type DriverFormProps = {};
 
@@ -19,20 +20,13 @@ export default function DriverForm({
   diagnostics,
 }: DriverFormProps) {
   const [open, setOpen] = useState(false);
-  const { events, updateDailyLog, getDailyLog } = useTransactionContext();
+  const { updateDailyLog, getDailyLog } = useTransactionContext();
   const dailyLog = getDailyLog(selectedDay.toFormat("yyyy/MM/dd"));
   const form = dailyLog?.form;
   const dayDiagnostics = diagnostics.byDate[selectedDay.toFormat("yyyy/MM/dd")];
-  console.log({ dayDiagnostics });
-  const certIssue = dayDiagnostics?.issues.find((issue) =>
-    [
-      "MISSING_CERTIFICATION",
-      "MISSING_SIGNATURE",
-      "INVALID_CERTIFICATION_TIME",
-      "CURRENT_DAY_CERTIFICATION",
-      "CURRENT_DAY_SIGNATURE",
-      "DUPLICATE_CERTIFICATION",
-    ].includes(issue.code),
+
+  const certIssue = dayDiagnostics?.issues.find(
+    (issue: LogIssue) => issue.group === "Certification",
   );
 
   const certError = certIssue?.message ?? null;

@@ -43,11 +43,6 @@ export async function runWithInfiniteRetry(
         delayMs,
       });
 
-      console.warn(
-        `${item.label} failed. Retry ${attempt} in ${delayMs / 1000}s`,
-        error,
-      );
-
       await sleep(delayMs);
     }
   }
@@ -120,7 +115,7 @@ export async function runQueue({
           }
         });
 
-        break; // important: only launch one per tick
+        break;
       }
 
       if (index >= items.length && active === 0) {

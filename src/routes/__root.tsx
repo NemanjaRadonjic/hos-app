@@ -14,7 +14,7 @@ const RootComponent = () => {
       {/* <Navbar /> */}
       <main className="min-h-0 flex-1 overflow-auto">
         <Outlet />
-        <Toaster />
+        <Toaster offset={{ bottom: 62 }} />
       </main>
     </div>
   );

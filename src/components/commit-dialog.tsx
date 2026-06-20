@@ -55,7 +55,6 @@ export function CommitDialog({
       {} as Record<string, typeof issues>,
     ),
   );
-  console.log("asd", progress.retrying);
   return (
     <Dialog open={open} onOpenChange={saving ? undefined : onOpenChange}>
       <DialogContent className="w-2xl">

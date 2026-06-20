@@ -16,6 +16,7 @@ import type { DutyEvent, EventCode } from "./types";
 import { isActiveEvent, isDutyEvent } from "@/lib/hos/helpers";
 import type { Violation } from "@/lib/hos/calculations";
 import drawViolationOverlay from "./drawViolationOverlay";
+import type { EnrichedEvent } from "@/routes/drivers/helpers/enrich-events";
 
 type ELDGraphProps = {
   selectedDay: DateTime<true> | DateTime<false>;
@@ -252,7 +253,6 @@ export default function ELDGraph({
 
     return vStart < dayEnd && vEnd > dayStart;
   });
-  console.log({ currentDayVios });
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -673,7 +673,7 @@ export default function ELDGraph({
           })}
         </div>
         <div
-          className="flex gap-2"
+          className="mt-5 flex gap-2"
           style={{ paddingLeft: GRAPH_SIZES.paddingLeft }}
         >
           {currentDayVios.map((v, i) => (

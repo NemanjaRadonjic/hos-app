@@ -1,4 +1,5 @@
 import api from "./axios";
+import { supabase } from "./supabase";
 import type {
   DailyLog,
   DailyLogSummary,
@@ -166,5 +167,32 @@ export const upsertHosEvent = async (id: string, payload: HosEventPayload) => {
 
 export const deleteHosEvent = async (id: string) => {
   const { data } = await api.delete(`/hos_events/${id}`);
+  return data;
+};
+
+type Point = {
+  lat: number;
+  lng: number;
+};
+
+export const generateInterlocations = async ({
+  start,
+  end,
+}: {
+  start: Point;
+  end: Point;
+}) => {
+  const { data, error } = await supabase.functions.invoke(
+    "generate_interlocations",
+    {
+      body: { start, end },
+    },
+  );
+
+  if (error) {
+    console.error(error);
+    return null;
+  }
+
   return data;
 };

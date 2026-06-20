@@ -19,8 +19,9 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
-        error: "flex items-center bg-red-200/20 text-[14px] text-red-500",
-        success: "flex items-center bg-success/10 text-[14px] text-success",
+        error: "flex items-center bg-red-200/20 text-red-500",
+        success:
+          "flex items-center bg-[var(--hos-DS_D-fg)] text-[var(--hos-DS_D-bg)]",
         warning: "flex items-center bg-warning/20 text-[14px] text-warning",
       },
       size: {

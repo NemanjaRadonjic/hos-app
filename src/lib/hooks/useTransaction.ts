@@ -19,6 +19,7 @@ import {
 import { useDriverData } from "./useDriverData";
 import {
   deleteHosEvent,
+  generateInterlocations,
   upsertDailyLog,
   upsertDailyLogSummary,
   upsertHosEvent,
@@ -30,6 +31,9 @@ import { findCertAnchorEvent } from "./helpers/find-cert-anchor";
 import { isDayCertified } from "./helpers/check-date-certified";
 import type { CertHosEvent } from "@/components/LogEvent/helpers/types";
 import { runQueue, type QueueItem } from "../helpers/api-helpers";
+import { buildInterlocations } from "./helpers/build-interlocations";
+import { buildBasicEventType } from "@/components/LogEvent/EditForm/event-type-bodies";
+import { getCalculatedLocationData } from "../helpers/get-calculated-location";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
 
@@ -57,7 +61,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const { data: company } = useCompany();
 
   const [status, setStatus] = useState<TransactionStatus>("idle");
-  console.log({ status });
   // ─── server data ─────────────────────────────────────────────────────────
   // useDailyLogsData fetches everything from the server and caches it
   // we never mutate this cache — it stays as the ground truth / original snapshot
@@ -74,12 +77,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // events get copied into local state because they can be heavily mutated
   // (timestamp shifts, status changes, etc.)
   const [events, setEvents] = useState<HosEventPayload[]>([]);
-  console.log({ events });
+
   // dailyLogEdits is a sparse delta — only the fields that changed per log id
   const [dailyLogEdits, setDailyLogEdits] = useState<Record<string, DailyLog>>(
     {},
   );
-  console.log({ dailyLogEdits });
 
   // ─── sync events from cache into local state ──────────────────────────────
   // only re-syncs when a new page is fetched (pageCount changes)
@@ -125,8 +127,19 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     }
   }, [selectedDay, pageCount]);
 
-  const createEvent = (event: Omit<HosEvent, "_id">) => {
-    const newEvent: HosEvent = {
+  const isLockedEvent = (event?: HosEventPayload | HosEvent | null) =>
+    Boolean(event?.i);
+
+  const toastLocked = () => {
+    toast.error("Locked/inactive events cannot be changed.");
+  };
+
+  const createEvent = (event: HosEvent | HosEventPayload) => {
+    if (isLockedEvent(event)) {
+      toastLocked();
+      return;
+    }
+    const newEvent: HosEvent | HosEventPayload = {
       ...event,
       _id: generateHosEventId(),
     };
@@ -138,17 +151,32 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     );
 
     setStatus("pending");
+    return newEvent;
   };
 
   const deleteEvent = (eventId: string) => {
-    setStatus("pending");
+    const target = events.find((e) => e._id === eventId);
+
+    if (isLockedEvent(target)) {
+      toastLocked();
+      return;
+    }
+
     setEvents((prev) => prev.filter((e) => e._id !== eventId));
+    setStatus("pending");
   };
 
   const updateEvent = (
     id: string,
     updater: (event: HosEventPayload) => HosEventPayload,
   ) => {
+    const target = events.find((e) => e._id === id);
+
+    if (isLockedEvent(target)) {
+      toastLocked();
+      return;
+    }
+
     setEvents((prev) =>
       sortEvents(
         prev.map((event) => (event._id === id ? updater(event) : event)),
@@ -165,7 +193,12 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     selectedIds: Set<string>;
     deltaMs: number;
   }) => {
-    setStatus("pending");
+    const lockedSelected = events.some((e) => selectedIds.has(e._id) && e.i);
+
+    if (lockedSelected) {
+      toastLocked();
+      return;
+    }
 
     setEvents((prev) =>
       sortEvents(
@@ -173,7 +206,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
           if (!selectedIds.has(e._id)) return e;
 
           const newTimestamp = e.eventTime.timestamp + deltaMs;
-
           const newDate =
             DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
 
@@ -191,6 +223,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
         }),
       ),
     );
+
+    setStatus("pending");
   };
 
   // ─── daily log helpers ────────────────────────────────────────────────────
@@ -288,80 +322,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       changedLogs,
     };
   };
-
-  // const commit = async () => {
-  //   setStatus("saving");
-  //   const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
-  //   console.log({ changedEvents, changedLogs, deletedEventIds });
-  //   const failed: string[] = [];
-
-  //   // daily logs
-  //   for (const log of changedLogs) {
-  //     const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
-  //     try {
-  //       await upsertDailyLog(log._id, log);
-  //       const existingSummary = getSummary(log.logDate.date);
-
-  //       // const hasForms =
-  //       //   log.form.vehicle ||
-  //       //   log.form.signature ||
-  //       //   log.form.shippingDocuments.length ||
-  //       //   log.form.trailers.length;
-
-  //       // if i want full control over the form dive into this, but not neede rn
-
-  //       const summary = existingSummary
-  //         ? {
-  //             ...existingSummary,
-  //             hasForms: true,
-  //             isSigned: Boolean(log.form.signature),
-  //           }
-  //         : buildDailyLogSummary({
-  //             id: summaryId,
-  //             dId: driver.dId,
-  //             userId: driver.id,
-  //             date: log.logDate.date,
-  //             isSigned: Boolean(log.form.signature),
-  //           });
-  //       console.log({ summary });
-  //       await upsertDailyLogSummary(summaryId, summary);
-  //     } catch {
-  //       failed.push(log._id);
-  //     }
-  //   }
-
-  //   events;
-  //   for (const event of changedEvents) {
-  //     try {
-  //       await upsertHosEvent(event._id, event);
-  //     } catch {
-  //       failed.push(event._id);
-  //     }
-  //   }
-
-  //   for (const id of deletedEventIds) {
-  //     try {
-  //       await deleteHosEvent(id);
-  //     } catch {
-  //       failed.push(id);
-  //     }
-  //   }
-
-  //   if (failed.length > 0) {
-  //     setStatus("error");
-  //     // rollback failed log edits
-  //     setDailyLogEdits((prev) => {
-  //       const next = { ...prev };
-  //       failed.forEach((id) => delete next[id]);
-  //       return next;
-  //     });
-  //   } else {
-  //     setStatus("idle");
-  //     setDailyLogEdits({});
-  //     await queryClient.refetchQueries({ queryKey: ["driverData", userId] });
-  //   }
-  // };
-
+  const savePayload = getSavePayload();
+  console.log({ savePayload });
   const commit = async (
     onProgress?: (p: CommitProgress) => void,
   ): Promise<CommitResult> => {
@@ -432,12 +394,18 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       },
     });
 
-    setStatus("idle");
-    setDailyLogEdits({});
-
     await queryClient.refetchQueries({
       queryKey: ["driverData", userId],
     });
+
+    const freshData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
+      "driverData",
+      userId,
+    ]);
+
+    setEvents(sortEvents(freshData?.pages.flatMap((p) => p.eventsData) ?? []));
+    setDailyLogEdits({});
+    setStatus("idle");
 
     return {
       failed: [],
@@ -550,6 +518,151 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     setStatus("pending");
   };
 
+  const fixInt = async (selectedId: string) => {
+    const selected = events.find((e) => e._id === selectedId);
+
+    if (!selected) return;
+    if (selected.eventCode.id !== "DS_D") {
+      toast.error("Selected event is not a driving event.");
+      return;
+    }
+
+    const sorted = sortEvents(events);
+    const selectedIndex = sorted.findIndex((e) => e._id === selectedId);
+
+    const endEvent = sorted
+      .slice(selectedIndex + 1)
+      .find((e) => ["DS_OFF", "DS_SB", "DS_ON"].includes(e.eventCode.id));
+
+    if (!endEvent) {
+      toast.error("No ending duty status event found.");
+      return;
+    }
+
+    if (
+      selected.totalVehicleMiles == null ||
+      endEvent.totalVehicleMiles == null
+    ) {
+      toast.error("Missing odometer");
+      return;
+    }
+
+    if (!selected.location || !endEvent.location) {
+      toast.error("Start or end location is missing.");
+      return;
+    }
+    const startTs = selected.eventTime.timestamp;
+    const endTs = endEvent.eventTime.timestamp;
+
+    if (endTs - startTs <= 60 * 60 * 1000) {
+      toast.error("This driving doesn't need interlocations");
+      return;
+    }
+
+    const { routes } = await generateInterlocations({
+      start: {
+        lat: selected.location.lat,
+        lng: selected.location.lon,
+      },
+      end: {
+        lat: endEvent.location.lat,
+        lng: endEvent.location.lon,
+      },
+    });
+
+    if (!routes) {
+      toast.error("Failed to generate route.");
+      return;
+    }
+    const odometerDiff =
+      endEvent.totalVehicleMiles - selected.totalVehicleMiles;
+    const rankedRoutes = routes
+      .map((route: any) => ({
+        ...route,
+        diffMiles: Math.abs(route.distanceMiles - odometerDiff),
+        diffPercent:
+          Math.abs(route.distanceMiles - odometerDiff) / odometerDiff,
+      }))
+      .sort((a: any, b: any) => a.diffMiles - b.diffMiles);
+
+    // block invalid
+    const route = rankedRoutes[0];
+
+    const routeMiles = route.distanceMiles;
+
+    const diffMiles = Math.abs(routeMiles - odometerDiff);
+
+    const allowedDiffMiles = Math.max(2, odometerDiff * 0.08);
+
+    if (diffMiles > allowedDiffMiles) {
+      toast.error(
+        `Route distance does not match odometer. Route: ${routeMiles.toFixed(
+          1,
+        )} mi, odometer: ${odometerDiff.toFixed(1)} mi.`,
+      );
+      return;
+    }
+
+    const points = buildInterlocations({
+      routeCoordinates: route.coordinates,
+      startTs,
+      endTs,
+      startOdometer: selected.totalVehicleMiles,
+      endOdometer: endEvent.totalVehicleMiles,
+    });
+
+    const interlocationEvents = points.map((point) => {
+      const locationData = getCalculatedLocationData(
+        point.location.lat,
+        point.location.lng,
+      );
+      return {
+        ...selected,
+
+        eventTime: {
+          ...selected.eventTime,
+          timestamp: point.timestamp,
+          logDate: {
+            ...selected.eventTime.logDate,
+            date: DateTime.fromMillis(point.timestamp).toFormat("yyyy/MM/dd"),
+          },
+        },
+
+        location: {
+          lat: point.location.lat,
+          lon: point.location.lng,
+          calculatedLocation: locationData.calculatedLocation,
+          source: "E",
+          state: locationData.state,
+          timestamp: point.timestamp,
+        },
+
+        totalVehicleMiles: point.odometer,
+      };
+    });
+
+    const newEvents = interlocationEvents.map((iE) =>
+      buildBasicEventType(iE, "LOG_NORMAL_PRECISION", generateHosEventId()),
+    );
+
+    setEvents((prev) =>
+      sortEvents([
+        ...prev.filter(
+          (event) =>
+            !(
+              event._id !== selected._id &&
+              event._id !== endEvent._id &&
+              event.eventTime.timestamp > selected.eventTime.timestamp &&
+              event.eventTime.timestamp < endEvent.eventTime.timestamp
+            ),
+        ),
+        ...newEvents,
+      ]),
+    );
+
+    setStatus("pending");
+  };
+
   const dailyLogs = [
     ...(data?.dailyLogsData ?? []).filter((log) => !dailyLogEdits[log._id]),
     ...Object.values(dailyLogEdits),
@@ -588,5 +701,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     // functions
     fixCert,
+    fixInt,
   };
 };

@@ -1012,7 +1012,6 @@ export function hosEngine(events: HosEvent[]) {
   const cycleStates = buildCycleStates(segments);
   const { violations, ...result } = runEngine(events);
   const cycleViolations = checkCycleViolations(cycleStates, segments);
-  console.log("CYCLE VIO:", cycleViolations);
   return {
     clocks: {
       ...result,

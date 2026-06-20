@@ -6,14 +6,15 @@ import type {
   CertHosEvent,
   DiagHosEvent,
 } from "../helpers/types";
-import type { HosEvent } from "@/lib/types";
+import type { HosEvent, HosEventPayload } from "@/lib/types";
 
 export function buildBasicEventType(
-  prev: HosEvent,
+  prev: HosEvent | HosEventPayload,
   status: string,
+  id?: string,
 ): BasicHosEvent {
   return {
-    _id: prev._id,
+    _id: id || prev._id,
     companyId: prev.companyId,
     userId: prev.userId,
 

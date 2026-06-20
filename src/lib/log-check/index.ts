@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { DailyLog, HosEventPayload } from "@/lib/types";
 import { findPreviousDutyStatusEvent } from "./helpers/find-duty-status";
+import { enrichEvents } from "@/routes/drivers/helpers/enrich-events";
 
 export type LogIssueCode =
   | "MISSING_SIGNATURE"
@@ -9,11 +10,23 @@ export type LogIssueCode =
   | "CURRENT_DAY_CERTIFICATION"
   | "CURRENT_DAY_SIGNATURE"
   | "INVALID_CERTIFICATION_TIME"
-  | "CERTIFICATION_DURING_DRIVING";
+  | "CERTIFICATION_DURING_DRIVING"
+  | "NEGATIVE_ODOMETER_DELTA"
+  | "NEGATIVE_ENGINE_HOURS_DELTA"
+  | "INVALID_ORIGIN"
+  | "LOCATION_CHANGED_WITHOUT_MOVEMENT";
+
+type ISSUE_GROUP =
+  | "Certification"
+  | "Odometer"
+  | "Engine Hours"
+  | "Origin"
+  | "Location";
 
 export type LogIssue = {
   eventId?: string;
   code: LogIssueCode;
+  group: ISSUE_GROUP;
   logDate: string;
   severity: "error" | "warning";
   message: string;
@@ -39,7 +52,6 @@ export type LogDiagnosticsState = {
   issues: LogIssue[];
 };
 
-const certAfterEventCodes = ["DS_OFF", "DS_SB", "DS_D", "DS_ON"];
 const activeStatusCodes = ["DS_ON", "DS_D"];
 
 export function buildLogCheck({
@@ -54,9 +66,8 @@ export function buildLogCheck({
   const byDate: Record<string, LogDayCheck> = {};
   const issues: LogIssue[] = [];
   const dates = new Set<string>();
-
+  const enrichedEvents = enrichEvents(events);
   for (const log of dailyLogs) {
-    console.log(log, { date: log.logDate.date });
     dates.add(log.logDate.date);
   }
 
@@ -69,6 +80,12 @@ export function buildLogCheck({
     .sort((a, b) => b.eventTime.timestamp - a.eventTime.timestamp)[0];
 
   const lastActiveLogDate = lastActiveStatusEvent?.eventTime.logDate.date;
+
+  const activeCutoffDate = lastActiveLogDate
+    ? DateTime.fromFormat(lastActiveLogDate, "yyyy/MM/dd")
+        .minus({ days: 7 })
+        .toFormat("yyyy/MM/dd")
+    : undefined;
 
   for (const logDate of dates) {
     const isAfterLastActiveDay =
@@ -90,10 +107,17 @@ export function buildLogCheck({
     const isCurrentDay = day.hasSame(now, "day");
     const hasSignature = Boolean(dailyLog?.form.signature);
 
-    const dayIssues: LogIssue[] = [];
+    // const certRequired =
+    //   !isCurrentDay &&
+    //   lastActiveLogDate !== undefined &&
+    //   logDate <= lastActiveLogDate &&
+    //   (!activeCutoffDate || logDate >= activeCutoffDate);
+
+    const certRequired = !isCurrentDay;
 
     if (isCurrentDay && hasSignature) {
-      dayIssues.push({
+      issues.push({
+        group: "Certification",
         code: "CURRENT_DAY_SIGNATURE",
         logDate,
         severity: "error",
@@ -101,21 +125,29 @@ export function buildLogCheck({
       });
     }
 
-    if (!isCurrentDay && !isAfterLastActiveDay && !hasSignature) {
-      dayIssues.push({
-        code: "MISSING_SIGNATURE",
-        logDate,
-        severity: "error",
-        message: "Log is missing signature.",
-      });
+    if (!hasSignature) {
+      if (certificationEvents.length > 0) {
+        issues.push({
+          group: "Certification",
+          code: "MISSING_SIGNATURE",
+          logDate,
+          severity: "error",
+          message: "Certified log is missing signature.",
+        });
+      } else if (certRequired) {
+        issues.push({
+          group: "Certification",
+          code: "MISSING_SIGNATURE",
+          logDate,
+          severity: "error",
+          message: "Log is missing signature.",
+        });
+      }
     }
 
-    if (
-      !isCurrentDay &&
-      !isAfterLastActiveDay &&
-      certificationEvents.length === 0
-    ) {
-      dayIssues.push({
+    if (certRequired && certificationEvents.length === 0) {
+      issues.push({
+        group: "Certification",
         code: "MISSING_CERTIFICATION",
         logDate,
         severity: "error",
@@ -123,18 +155,10 @@ export function buildLogCheck({
       });
     }
 
-    if (certificationEvents.length > 0 && !hasSignature) {
-      dayIssues.push({
-        code: "MISSING_SIGNATURE",
-        logDate,
-        severity: "error",
-        message: "Certified log is missing signature.",
-      });
-    }
-
     if (certificationEvents.length > 1) {
       for (const event of certificationEvents.slice(1)) {
-        dayIssues.push({
+        issues.push({
+          group: "Certification",
           code: "DUPLICATE_CERTIFICATION",
           logDate,
           severity: "error",
@@ -154,7 +178,8 @@ export function buildLogCheck({
       );
 
       if (previousStatus?.eventCode.id === "DS_D") {
-        dayIssues.push({
+        issues.push({
+          group: "Certification",
           code: "CERTIFICATION_DURING_DRIVING",
           logDate,
           severity: "error",
@@ -164,7 +189,8 @@ export function buildLogCheck({
       }
 
       if (isCurrentDay) {
-        dayIssues.push({
+        issues.push({
+          group: "Certification",
           code: "CURRENT_DAY_CERTIFICATION",
           logDate,
           severity: "error",
@@ -179,7 +205,8 @@ export function buildLogCheck({
         lastMainEvent &&
         cert.eventTime.timestamp <= lastMainEvent.eventTime.timestamp
       ) {
-        dayIssues.push({
+        issues.push({
+          group: "Certification",
           code: "INVALID_CERTIFICATION_TIME",
           logDate,
           severity: "error",
@@ -193,7 +220,7 @@ export function buildLogCheck({
       logDate,
       dailyLog,
       events: dayEvents,
-      issues: dayIssues,
+      issues: issues.filter((issue) => issue.logDate === logDate),
       derived: {
         signature: dailyLog?.form.signature,
         certificationEvents,
@@ -203,9 +230,98 @@ export function buildLogCheck({
         isCurrentDay,
       },
     };
+  }
+  let previousCalculatedLocation: string | null = null;
+  // OTHER
+  for (const { event, info } of enrichedEvents) {
+    if (event.location) {
+      previousCalculatedLocation = event.location.calculatedLocation;
+    }
+    // NEGATIVE ODO
+    if (info.odoDelta != null && info.odoDelta < 0) {
+      issues.push({
+        group: "Odometer",
+        code: "NEGATIVE_ODOMETER_DELTA",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Odometer decreased from previous event.",
+      });
+    }
 
-    issues.push(...dayIssues);
+    // NEGATIVE EH
+    if (
+      event.eventCode.id !== "DR_CERT_1" &&
+      info.engHoursDelta != null &&
+      info.engHoursDelta < 0
+    ) {
+      issues.push({
+        group: "Engine Hours",
+        code: "NEGATIVE_ENGINE_HOURS_DELTA",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Engine hours decreased from previous event.",
+      });
+    }
+
+    // ORIGIN
+    if (event.eventCode.id === "DS_D" && event.recordOrigin?.id === "DRIVER") {
+      issues.push({
+        group: "Origin",
+        code: "INVALID_ORIGIN",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Driving status has a driver origin.",
+      });
+    }
+    if (
+      event.recordOrigin &&
+      !["ELD", "AUTO", "DRIVER"].includes(event.recordOrigin?.id)
+    ) {
+      issues.push({
+        group: "Origin",
+        code: "INVALID_ORIGIN",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Invalid origin.",
+      });
+    }
+    if (event.recordOrigin?.id === "ELD" && event.eventComment) {
+      issues.push({
+        group: "Origin",
+        code: "INVALID_ORIGIN",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "A note is making this origin invalid.",
+      });
+    }
+
+    // LOCATION
+    const currentLocation = event.location?.calculatedLocation;
+    if (
+      currentLocation &&
+      !isMovementStatus(event.eventCode.id) &&
+      previousCalculatedLocation !== currentLocation
+    ) {
+      issues.push({
+        group: "Location",
+        code: "LOCATION_CHANGED_WITHOUT_MOVEMENT",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "warning",
+        message: "Location changed without driving.",
+      });
+    }
   }
 
   return { byDate, issues };
 }
+
+const isMovementStatus = (code: string) =>
+  code === "DS_D" ||
+  code.startsWith("LOG_NORMAL_") ||
+  code.startsWith("LOG_REDUCED_");

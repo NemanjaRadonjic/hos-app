@@ -11,6 +11,8 @@ import { FaCertificate } from "react-icons/fa6";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 import type { CommitProgress } from "@/lib/hooks/useTransaction";
 import { LogCheck } from "./log-check-dialog";
+import { supabase } from "@/lib/supabase";
+import { TbRoute2 } from "react-icons/tb";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
@@ -31,7 +33,7 @@ export default function ControlBar({
   setFocusedId,
   diagnostics,
 }: ControlBarProps) {
-  const { commit, reset, status, getSaveStats, fixCert } =
+  const { events, commit, reset, status, getSaveStats, fixCert, fixInt } =
     useTransactionContext();
 
   const [commitOpen, setCommitOpen] = useState(false);
@@ -51,6 +53,14 @@ export default function ControlBar({
   const [seconds, setSeconds] = useState("");
 
   const count = selectedIds.size;
+
+  const selectedId = count === 1 ? [...selectedIds][0] : undefined;
+
+  const selectedEvent = selectedId
+    ? events.find((event) => event._id === selectedId)
+    : undefined;
+
+  const canFixInt = count === 1 && selectedEvent?.eventCode.id === "DS_D";
 
   const handleSubmit = () => {
     const h = parseInt(hours || "0", 10);
@@ -121,6 +131,19 @@ export default function ControlBar({
         <Button onClick={() => fixCert(selectedDay)}>
           <FaCertificate className="size-3" />
           Fix Cert
+        </Button>
+      </div>
+      <div>
+        <Button
+          disabled={!canFixInt}
+          onClick={() => {
+            if (!selectedId || !canFixInt) return;
+            fixInt(selectedId);
+            resetSelection();
+          }}
+        >
+          <TbRoute2 className="size-3" />
+          Fix Int
         </Button>
       </div>
 

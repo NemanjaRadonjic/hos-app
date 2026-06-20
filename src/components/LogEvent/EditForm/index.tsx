@@ -140,11 +140,12 @@ export function EditEventModal({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  console.count("EditEventModal render");
   const { updateEvent } = useTransactionContext();
   const { vehicles, elds } = useDriversData();
-  console.log({ vehicles });
+
   const [draft, setDraft] = useState<Draft | null>(null);
-  console.log({ draft });
+
   const [formState, setFormState] = useState<FormState>({
     lat: "",
     lon: "",
@@ -160,25 +161,24 @@ export function EditEventModal({
     ? getCalculatedLocationData(lat, lon).calculatedLocation
     : "None";
   useEffect(() => {
-    if (!open || !event) {
+    if (!event) {
       setDraft(null);
       return;
     }
-    const nextDraft = buildDraft(
-      event,
-      draft?.event.eventCode ?? event.eventCode.id,
-    );
+
+    const nextDraft = buildDraft(event, event.eventCode.id);
+
     setFormState({
-      lat: String(event.location?.lat),
-      lon: String(event.location?.lon),
+      lat: event.location?.lat != null ? String(event.location.lat) : "",
+      lon: event.location?.lon != null ? String(event.location.lon) : "",
     });
+
     setDraft(nextDraft);
     setErrors(validateDraft(nextDraft));
-  }, [open, event, draft?.family]);
+  }, [event]);
 
   if (!draft) return null;
 
-  console.log({ errors });
   const updateLocation = (
     patch: NonNullable<Partial<HosEvent["location"]>>,
   ) => {
@@ -231,8 +231,7 @@ export function EditEventModal({
     if (!event) return null;
 
     const payload = buildPayload({ original: event, draft: draft });
-    console.log({ payload });
-    console.log({ errors, event: draft.event });
+
     if (payload) {
       updateEvent(event._id, () => payload);
     }
@@ -300,7 +299,14 @@ export function EditEventModal({
           <Select
             value={draft.event.eventCode}
             onValueChange={(value) => {
-              updateDraft({ eventCode: value }, getEventFamily(value));
+              setDraft((prev) => {
+                if (!prev || !event) return prev;
+
+                const nextDraft = buildDraft(event, value);
+
+                setErrors(validateDraft(nextDraft));
+                return nextDraft;
+              });
             }}
           >
             <SelectTrigger className="border-none">
