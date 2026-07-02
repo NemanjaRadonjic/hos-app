@@ -157,6 +157,7 @@ export interface DailyLogBase {
   type: {
     id: string;
   };
+  dId: string;
 }
 
 export interface DailyLog extends DailyLogBase {
@@ -336,17 +337,6 @@ export type HosEvent = {
   // inspection
   i?: boolean;
 };
-
-type ServerFields =
-  | "_rev"
-  | "createdBy"
-  | "createdAt"
-  | "updatedBy"
-  | "updatedAt"
-  | "stime";
-
-export type HosEventPayload = Omit<HosEvent, ServerFields> &
-  Partial<Pick<HosEvent, ServerFields>>;
 
 export interface Location {
   calculatedLocation: string;
@@ -615,4 +605,16 @@ export type ProviderViolation = {
   regulation: {
     id: string;
   };
+};
+
+export type VehicleSimplified = {
+  id: string;
+  name: string;
+  vin: string;
+};
+
+export type ELDSimplified = {
+  id: string;
+  serialNumber: string;
+  sn: string;
 };

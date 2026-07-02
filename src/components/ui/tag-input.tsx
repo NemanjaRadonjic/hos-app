@@ -142,7 +142,10 @@ export const TagInput = ({
         ref={inputRef}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          handleKeyDown(e);
+        }}
         onBlur={() => addTag(input)}
         placeholder={value.length === 0 ? placeholder : ""}
         className="placeholder:text-muted-foreground min-w-20 flex-1 bg-transparent outline-none"

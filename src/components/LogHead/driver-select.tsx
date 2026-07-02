@@ -18,6 +18,7 @@ import { useDriverData } from "@/lib/hooks/useDriverData";
 import { FaTruckFront } from "react-icons/fa6";
 import { useState } from "react";
 import { MdClear, MdEdit } from "react-icons/md";
+import { toast } from "sonner";
 
 type DriverSelectProps = {
   driverId: string;
@@ -42,6 +43,14 @@ const DriverSelect = ({
           <Button
             variant="outline"
             className="w-84 cursor-pointer items-center justify-start"
+            onContextMenu={(e) => {
+              e.preventDefault();
+
+              if (driver?.name) {
+                navigator.clipboard.writeText(driver.name);
+              }
+              toast.success("Driver name copied.");
+            }}
           >
             <div className="flex flex-1 items-center">
               <div className="flex flex-1 items-center gap-2">
@@ -81,7 +90,7 @@ const DriverSelect = ({
                       <CommandItem
                         className="flex cursor-pointer justify-between [&_svg.lucide-check]:hidden"
                         key={driverOption.id}
-                        value={`${driverOption.name} ${driverOption.vehicle}`}
+                        value={`${driverOption.name} ${driverOption.vehicle.name}`}
                         onSelect={() => {
                           if (onSelect) {
                             onSelect(driverOption.id);

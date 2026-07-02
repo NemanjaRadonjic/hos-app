@@ -1,7 +1,16 @@
 import { DateTime } from "luxon";
-import type { DailyLog, HosEventPayload } from "@/lib/types";
+import type { DailyLog, HosEvent } from "@/lib/types";
 import { findPreviousDutyStatusEvent } from "./helpers/find-duty-status";
 import { enrichEvents } from "@/routes/drivers/helpers/enrich-events";
+import { getStateSpeedLimit } from "../helpers/speed-limit";
+import { getStateFromCalculatedLocation } from "../helpers/get-calculated-location";
+import {
+  isDrivingEvent,
+  isEnginePowerEvent,
+  isInterlocationEvent,
+  isMovementEvent,
+  isStopEvent,
+} from "./helpers/status-type-checks";
 
 export type LogIssueCode =
   | "MISSING_SIGNATURE"
@@ -14,14 +23,37 @@ export type LogIssueCode =
   | "NEGATIVE_ODOMETER_DELTA"
   | "NEGATIVE_ENGINE_HOURS_DELTA"
   | "INVALID_ORIGIN"
-  | "LOCATION_CHANGED_WITHOUT_MOVEMENT";
+  | "INVALID_STATUS"
+  | "LOCATION_CHANGED_WITHOUT_MOVEMENT"
+  | "FUTURE_DAY_CERTIFICATION"
+  | "UNJUSTIFIED_LOCATION_CHANGE"
+  | "MANUAL_LOCATION"
+  | "MISSING_ODOMETER"
+  | "DUPLICATE_STATUS"
+  | "DUPLICATE_TIMESTAMP"
+  | "MISSING_ENGINE_HOURS"
+  | "MISSING_LOCATION"
+  | "POSSIBLE_SPEEDING"
+  | "INVALID_INTERLOCATION_TIMING"
+  | "MISSING_INTERLOCATION"
+  | "UNCHANGED_ODOMETER_DURING_DRIVING"
+  | "LOCATION_CHANGED_WITHOUT_ODOMETER_CHANGE"
+  | "DUPLICATE_ENGINE_POWER_EVENT"
+  | "DRIVING_WHILE_ENGINE_OFF"
+  | "TELEPORT_WITH_ODOMETER_CHANGE"
+  | "ENGINE_HOURS_CHANGED_WHILE_ENGINE_OFF"
+  | "INVALID_ENGINE_HOURS_DELTA";
 
 type ISSUE_GROUP =
   | "Certification"
   | "Odometer"
   | "Engine Hours"
   | "Origin"
-  | "Location";
+  | "Location"
+  | "Status"
+  | "Time"
+  | "Possible speeding"
+  | "Interlocation";
 
 export type LogIssue = {
   eventId?: string;
@@ -35,11 +67,11 @@ export type LogIssue = {
 export type LogDayCheck = {
   logDate: string;
   dailyLog?: DailyLog;
-  events: HosEventPayload[];
+  events: HosEvent[];
   issues: LogIssue[];
   derived: {
     signature?: string;
-    certificationEvents: HosEventPayload[];
+    certificationEvents: HosEvent[];
     isCertified: boolean;
     hasSignature: boolean;
     canCertify: boolean;
@@ -52,14 +84,12 @@ export type LogDiagnosticsState = {
   issues: LogIssue[];
 };
 
-const activeStatusCodes = ["DS_ON", "DS_D"];
-
 export function buildLogCheck({
   events,
   dailyLogs,
   now = DateTime.now(),
 }: {
-  events: HosEventPayload[];
+  events: HosEvent[];
   dailyLogs: DailyLog[];
   now?: DateTime;
 }): LogDiagnosticsState {
@@ -75,21 +105,7 @@ export function buildLogCheck({
     dates.add(event.eventTime.logDate.date);
   }
 
-  const lastActiveStatusEvent = [...events]
-    .filter((event) => activeStatusCodes.includes(event.eventCode.id))
-    .sort((a, b) => b.eventTime.timestamp - a.eventTime.timestamp)[0];
-
-  const lastActiveLogDate = lastActiveStatusEvent?.eventTime.logDate.date;
-
-  const activeCutoffDate = lastActiveLogDate
-    ? DateTime.fromFormat(lastActiveLogDate, "yyyy/MM/dd")
-        .minus({ days: 7 })
-        .toFormat("yyyy/MM/dd")
-    : undefined;
-
   for (const logDate of dates) {
-    const isAfterLastActiveDay =
-      lastActiveLogDate && logDate > lastActiveLogDate;
     const day = DateTime.fromFormat(logDate, "yyyy/MM/dd");
 
     const dailyLog = dailyLogs.find((log) => log.logDate.date === logDate);
@@ -160,7 +176,7 @@ export function buildLogCheck({
         issues.push({
           group: "Certification",
           code: "DUPLICATE_CERTIFICATION",
-          logDate,
+          logDate: event.eventTime.logDate.date,
           severity: "error",
           message: "Log has duplicate certification events.",
           eventId: event._id,
@@ -171,6 +187,7 @@ export function buildLogCheck({
     const lastMainEvent = dayEvents
       .filter((event) => event.eventCode.id === "DS_D")
       .sort((a, b) => b.eventTime.timestamp - a.eventTime.timestamp)[0];
+
     for (const cert of certificationEvents) {
       const previousStatus = findPreviousDutyStatusEvent(
         events,
@@ -214,6 +231,18 @@ export function buildLogCheck({
           eventId: cert._id,
         });
       }
+      const certEventDate = cert.eventTime.logDate.date;
+      const certifiedDate = cert.certifiedRecordLogDate?.date;
+      if (certifiedDate && certifiedDate > certEventDate) {
+        issues.push({
+          group: "Certification",
+          code: "FUTURE_DAY_CERTIFICATION",
+          logDate: certEventDate,
+          severity: "error",
+          message: "Certification event is for a future log date.",
+          eventId: cert._id,
+        });
+      }
     }
 
     byDate[logDate] = {
@@ -231,13 +260,28 @@ export function buildLogCheck({
       },
     };
   }
-  let previousCalculatedLocation: string | null = null;
+
+  let prevEvent: HosEvent | null = null;
+  let prevLocation: HosEvent["location"] | null = null;
+  // this shit is used just for 1 rule, events cant have the same timestamp unless diag/malf's
+  let prevTimestamp: number | null = null;
+  let prevMovementEvent: HosEvent | null = null;
+  let drivingAnchor: HosEvent | null = null;
+  let expectedInterlocationTs: number | null = null;
+  let prevEnginePowerEvent: HosEvent | undefined;
   // OTHER
   for (const { event, info } of enrichedEvents) {
-    if (event.location) {
-      previousCalculatedLocation = event.location.calculatedLocation;
-    }
-    // NEGATIVE ODO
+    const isCert = event.eventCode.id.startsWith("DR_CERT_");
+    const isAuth =
+      event.eventCode.id === "DR_LOGIN" || event.eventCode.id === "DR_LOGOUT";
+    const isSystem =
+      event.eventCode.id.startsWith("DIAG_") ||
+      event.eventCode.id.startsWith("MALF_");
+    const isBasic = !isCert && !isAuth && !isSystem;
+    const isStop = isStopEvent(event);
+    const isMovement = isMovementEvent(event);
+    const isEnginePower = isEnginePowerEvent(event);
+    // ODO
     if (info.odoDelta != null && info.odoDelta < 0) {
       issues.push({
         group: "Odometer",
@@ -248,8 +292,68 @@ export function buildLogCheck({
         message: "Odometer decreased from previous event.",
       });
     }
+    if (!isCert && !event.totalVehicleMiles) {
+      issues.push({
+        group: "Odometer",
+        code: "MISSING_ODOMETER",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Missing odometer",
+      });
+    }
+    // ODOMETER UNCHANGED DURING DRIVING
+    if ((isMovement || isStop) && prevMovementEvent) {
+      const durationMs =
+        event.eventTime.timestamp - prevMovementEvent.eventTime.timestamp;
 
-    // NEGATIVE EH
+      const miles =
+        event.totalVehicleMiles != null &&
+        prevMovementEvent.totalVehicleMiles != null
+          ? event.totalVehicleMiles - prevMovementEvent.totalVehicleMiles
+          : null;
+
+      if (durationMs >= 15 * 60_000 && miles === 0) {
+        issues.push({
+          group: "Odometer",
+          code: "UNCHANGED_ODOMETER_DURING_DRIVING",
+          eventId: prevMovementEvent._id,
+          logDate: prevMovementEvent.eventTime.logDate.date,
+          severity: "error",
+          message: "Odometer did not change during driving.",
+        });
+      }
+    }
+
+    // NO ODO CHANGE WHILE YES LOCATION CHANGE
+    if ((isMovement || isStop) && prevMovementEvent) {
+      const prevLocation = prevMovementEvent.location?.calculatedLocation;
+      const currentLocation = event.location?.calculatedLocation;
+
+      const locationChanged =
+        prevLocation != null &&
+        currentLocation != null &&
+        prevLocation !== currentLocation;
+
+      const miles =
+        event.totalVehicleMiles != null &&
+        prevMovementEvent.totalVehicleMiles != null
+          ? event.totalVehicleMiles - prevMovementEvent.totalVehicleMiles
+          : null;
+
+      if (locationChanged && miles === 0) {
+        issues.push({
+          group: "Odometer",
+          code: "LOCATION_CHANGED_WITHOUT_ODOMETER_CHANGE",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Location changed without odometer change.",
+        });
+      }
+    }
+
+    // EH
     if (
       event.eventCode.id !== "DR_CERT_1" &&
       info.engHoursDelta != null &&
@@ -264,21 +368,95 @@ export function buildLogCheck({
         message: "Engine hours decreased from previous event.",
       });
     }
-
-    // ORIGIN
-    if (event.eventCode.id === "DS_D" && event.recordOrigin?.id === "DRIVER") {
+    if (!isCert && !event.totalVehicleMiles) {
       issues.push({
-        group: "Origin",
-        code: "INVALID_ORIGIN",
+        group: "Engine Hours",
+        code: "MISSING_ENGINE_HOURS",
         eventId: event._id,
         logDate: event.eventTime.logDate.date,
         severity: "error",
-        message: "Driving status has a driver origin.",
+        message: "Missing engine hours.",
       });
     }
+
+    // ENGINE HOURS VS TIME
+    if (
+      prevEvent &&
+      !isCert &&
+      event.totalEngineHours != null &&
+      prevEvent.totalEngineHours != null
+    ) {
+      const actualDelta = event.totalEngineHours - prevEvent.totalEngineHours;
+
+      const elapsedHours =
+        (event.eventTime.timestamp - prevEvent.eventTime.timestamp) / 3_600_000;
+
+      const engineIsDown =
+        prevEnginePowerEvent?.eventCode.id === "ENG_DOWN_NORMAL";
+
+      if (engineIsDown && actualDelta !== 0) {
+        issues.push({
+          group: "Engine Hours",
+          code: "ENGINE_HOURS_CHANGED_WHILE_ENGINE_OFF",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "warning",
+          message: `Engine hours changed by ${actualDelta.toFixed(
+            1,
+          )} while engine was off.`,
+        });
+      }
+
+      if (!engineIsDown) {
+        const diff = Math.abs(actualDelta - elapsedHours);
+
+        if (diff > 0.05) {
+          issues.push({
+            group: "Engine Hours",
+            code: "INVALID_ENGINE_HOURS_DELTA",
+            eventId: event._id,
+            logDate: event.eventTime.logDate.date,
+            severity: "warning",
+            message: `Engine hours changed by ${actualDelta.toFixed(
+              1,
+            )}, expected ${elapsedHours.toFixed(1)}.`,
+          });
+        }
+      }
+    }
+
+    // ENG
+    if (isEnginePower) {
+      if (prevEnginePowerEvent?.eventCode.id === event.eventCode.id) {
+        issues.push({
+          group: "Engine Hours",
+          code: "DUPLICATE_ENGINE_POWER_EVENT",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Duplicate engine power event.",
+        });
+      }
+
+      prevEnginePowerEvent = event;
+    }
+    if (
+      isDrivingEvent(event) &&
+      prevEnginePowerEvent?.eventCode.id === "ENG_DOWN_NORMAL"
+    ) {
+      issues.push({
+        group: "Engine Hours",
+        code: "DRIVING_WHILE_ENGINE_OFF",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Driving while the engine is off.",
+      });
+    }
+    // ORIGIN
     if (
       event.recordOrigin &&
-      !["ELD", "AUTO", "DRIVER"].includes(event.recordOrigin?.id)
+      !["ELD", "DRIVER"].includes(event.recordOrigin?.id)
     ) {
       issues.push({
         group: "Origin",
@@ -299,29 +477,269 @@ export function buildLogCheck({
         message: "A note is making this origin invalid.",
       });
     }
+    if (isAuth && event.recordOrigin?.id !== "ELD") {
+      const status = event.eventCode.id === "DR_LOGIN" ? "Login" : "Logout";
+      issues.push({
+        group: "Origin",
+        code: "INVALID_ORIGIN",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: `${status} has to be of origin Auto.`,
+      });
+    }
+
+    if (isBasic) {
+      if (!isStop) {
+        if (event.recordOrigin?.id !== "ELD") {
+          issues.push({
+            group: "Origin",
+            code: "INVALID_ORIGIN",
+            eventId: event._id,
+            logDate: event.eventTime.logDate.date,
+            severity: "error",
+            message: `Invalid origin.`,
+          });
+        }
+      } else if (event.eventCode.id !== "DS_ON") {
+        if (event.recordOrigin?.id !== "DRIVER") {
+          issues.push({
+            group: "Origin",
+            code: "INVALID_ORIGIN",
+            eventId: event._id,
+            logDate: event.eventTime.logDate.date,
+            severity: "error",
+            message: `Invalid origin.`,
+          });
+        }
+      }
+    }
+
+    // STATUS
+    if (isBasic) {
+      if (event.recordStatus?.id !== "ACTIVE") {
+        issues.push({
+          group: "Status",
+          code: "INVALID_STATUS",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: `Invalid status.`,
+        });
+      }
+    }
 
     // LOCATION
     const currentLocation = event.location?.calculatedLocation;
-    if (
-      currentLocation &&
-      !isMovementStatus(event.eventCode.id) &&
-      previousCalculatedLocation !== currentLocation
-    ) {
+    if (currentLocation && prevEvent) {
+      const locationChanged =
+        currentLocation !== prevLocation?.calculatedLocation;
+      const justified = isMovementEvent(prevEvent) && (isMovement || isStop);
+
+      if (locationChanged && !justified) {
+        issues.push({
+          group: "Location",
+          code: "UNJUSTIFIED_LOCATION_CHANGE",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Unjustified location change.",
+        });
+      }
+    }
+    if (!isCert && !isAuth) {
+      if (!event.location && !event.driverLocationDescription) {
+        issues.push({
+          group: "Location",
+          code: "MISSING_LOCATION",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Missing location",
+        });
+      }
+    }
+    if (event.driverLocationDescription) {
       issues.push({
         group: "Location",
-        code: "LOCATION_CHANGED_WITHOUT_MOVEMENT",
+        code: "MANUAL_LOCATION",
         eventId: event._id,
         logDate: event.eventTime.logDate.date,
-        severity: "warning",
-        message: "Location changed without driving.",
+        severity: "error",
+        message: "Manual location",
       });
+    }
+
+    // TELEPORT
+    const prevCalculatedLocation = prevLocation?.calculatedLocation;
+
+    const locationChanged =
+      currentLocation != null &&
+      prevCalculatedLocation != null &&
+      currentLocation !== prevCalculatedLocation;
+
+    const odoChanged = info.odoDelta != null && info.odoDelta > 0;
+
+    const previousAllowedMovement =
+      prevEvent != null && isMovementEvent(prevEvent);
+
+    if (locationChanged && odoChanged && !previousAllowedMovement) {
+      issues.push({
+        group: "Location",
+        code: "TELEPORT_WITH_ODOMETER_CHANGE",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: `Location changed while not driving. Odometer increased by ${info.odoDelta} mi.`,
+      });
+    }
+
+    // DUPLICATE STATUSES
+    const isInterlocation = isInterlocationEvent(event);
+    if (!isInterlocation && prevEvent?.eventCode.id === event.eventCode.id) {
+      issues.push({
+        group: "Status",
+        code: "DUPLICATE_STATUS",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Duplicate status",
+      });
+    }
+
+    // SAME TIMESTAMP
+    const prevSecond = prevTimestamp && Math.floor(prevTimestamp / 1000);
+    const currentSecond = Math.floor(event.eventTime.timestamp / 1000);
+
+    if (!isSystem && prevSecond === currentSecond) {
+      issues.push({
+        group: "Time",
+        code: "DUPLICATE_TIMESTAMP",
+        eventId: event._id,
+        logDate: event.eventTime.logDate.date,
+        severity: "error",
+        message: "Events occur within the same second",
+      });
+    }
+
+    const isDriving = isDrivingEvent(event);
+    if (isDriving) {
+      drivingAnchor = event;
+      expectedInterlocationTs = event.eventTime.timestamp + 3_600_000;
+    }
+    // INTERLOCATION TIMING
+    if (isInterlocation) {
+      if (!drivingAnchor || expectedInterlocationTs == null) {
+        issues.push({
+          group: "Time",
+          code: "INVALID_INTERLOCATION_TIMING",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Interlocation exists outside of driving.",
+        });
+      } else if (event.eventTime.timestamp !== expectedInterlocationTs) {
+        issues.push({
+          group: "Time",
+          code: "INVALID_INTERLOCATION_TIMING",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: "Interlocation timing is off.",
+        });
+      }
+
+      expectedInterlocationTs = event.eventTime.timestamp + 3_600_000;
+    }
+
+    // MISSING INTERLOCATION
+    if (isStop && drivingAnchor && expectedInterlocationTs != null) {
+      if (expectedInterlocationTs < event.eventTime.timestamp) {
+        issues.push({
+          group: "Time",
+          code: "MISSING_INTERLOCATION",
+          eventId: drivingAnchor._id,
+          logDate: drivingAnchor.eventTime.logDate.date,
+          severity: "error",
+          message: "Missing interlocation",
+        });
+
+        expectedInterlocationTs += 3_600_000;
+      }
+
+      drivingAnchor = null;
+      expectedInterlocationTs = null;
+    }
+    // POSSIBLE SPEEDING
+    if ((isMovement || isStop) && prevMovementEvent) {
+      const durationHours =
+        (event.eventTime.timestamp - prevMovementEvent.eventTime.timestamp) /
+        3_600_000;
+
+      const miles =
+        event.totalVehicleMiles != null &&
+        prevMovementEvent.totalVehicleMiles != null
+          ? event.totalVehicleMiles - prevMovementEvent.totalVehicleMiles
+          : null;
+
+      const fromState = getStateFromCalculatedLocation(
+        prevMovementEvent.location?.calculatedLocation,
+      );
+
+      const toState = getStateFromCalculatedLocation(
+        event.location?.calculatedLocation,
+      );
+
+      const fromLimit = fromState ? getStateSpeedLimit(fromState) : null;
+      const toLimit = toState ? getStateSpeedLimit(toState) : null;
+
+      const speedLimit =
+        fromLimit != null && toLimit != null
+          ? Math.floor((fromLimit + toLimit) / 2)
+          : (fromLimit ?? toLimit);
+
+      if (
+        durationHours > 0 &&
+        miles != null &&
+        miles > 0 &&
+        speedLimit != null
+      ) {
+        const mph = Math.round(miles / durationHours);
+
+        if (mph > speedLimit) {
+          issues.push({
+            group: "Possible speeding",
+            code: "POSSIBLE_SPEEDING",
+            eventId: prevMovementEvent._id,
+            logDate: prevMovementEvent.eventTime.logDate.date,
+            severity: "warning",
+            message: `Average speed is ${mph} mph. Expected threshold is ${speedLimit} mph.`,
+          });
+        }
+      }
+    }
+
+    if (isMovement) {
+      prevMovementEvent = event;
+    }
+
+    if (isStop) {
+      prevMovementEvent = null;
+      drivingAnchor = null;
+      expectedInterlocationTs = null;
+    }
+
+    if (!isCert) {
+      prevEvent = event;
+    }
+
+    if (!isCert && !isAuth) {
+      prevLocation = event.location;
+    }
+    if (!isSystem) {
+      prevTimestamp = event.eventTime.timestamp;
     }
   }
 
   return { byDate, issues };
 }
-
-const isMovementStatus = (code: string) =>
-  code === "DS_D" ||
-  code.startsWith("LOG_NORMAL_") ||
-  code.startsWith("LOG_REDUCED_");

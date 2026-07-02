@@ -17,23 +17,12 @@ import { isActiveEvent, isDutyEvent } from "@/lib/hos/helpers";
 import type { Violation } from "@/lib/hos/calculations";
 import drawViolationOverlay from "./drawViolationOverlay";
 import type { EnrichedEvent } from "@/routes/drivers/helpers/enrich-events";
+import { useSelectionStore } from "@/lib/store/useSelectionStore";
+import { isInterlocationEvent } from "@/lib/log-check/helpers/status-type-checks";
 
 type ELDGraphProps = {
   selectedDay: DateTime<true> | DateTime<false>;
   events: HosEvent[];
-  sliderSelection: {
-    start: number;
-    end: number;
-  };
-  setSliderSelection: React.Dispatch<
-    React.SetStateAction<{
-      start: number;
-      end: number;
-    }>
-  >;
-  sliderActive: boolean;
-  setSliderActive: React.Dispatch<React.SetStateAction<boolean>>;
-  setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   focusedId: string | null;
   setFocusedId: React.Dispatch<React.SetStateAction<string | null>>;
   violations: Violation[];
@@ -97,15 +86,19 @@ const ROW_FRACTIONS = { DS_OFF: 0.13, DS_SB: 0.38, DS_D: 0.63, DS_ON: 0.88 };
 export default function ELDGraph({
   selectedDay,
   events,
-  sliderSelection,
-  setSliderSelection,
-  sliderActive,
-  setSliderActive,
-  setSelectedIds,
   focusedId,
   setFocusedId,
   violations,
 }: ELDGraphProps) {
+  // store
+  const {
+    sliderSelection,
+    setSliderSelection,
+    sliderActive,
+    setSliderActive,
+    resetSelection,
+  } = useSelectionStore((s) => s);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseX = useRef<number | null>(null);
   const isDragging = useRef<null | "start" | "end">(null);
@@ -165,6 +158,9 @@ export default function ELDGraph({
   const otherEvents = events.filter(
     (e) => !mainEventCodes.includes(e.eventCode.id),
   );
+  const interlocationEvents = events.filter((event) =>
+    isInterlocationEvent(event),
+  );
 
   function transformData(): DutyEvent[] {
     const now = DateTime.now();
@@ -220,17 +216,7 @@ export default function ELDGraph({
         });
 
       if (clickedEvent) {
-        requestAnimationFrame(() => {
-          const row = document.getElementById(`row-${clickedEvent._id}`);
-
-          row?.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-          });
-
-          draw();
-        });
-
+        requestAnimationFrame(draw);
         setFocusedId(clickedEvent._id);
       }
     },
@@ -300,6 +286,7 @@ export default function ELDGraph({
       dutyEvents,
       ROW_POSITIONS,
       mainEvents,
+      interlocationEvents,
       isSelectedDayToday,
       selectedDay,
       GRAPH_SIZES,
@@ -375,8 +362,8 @@ export default function ELDGraph({
         ctx.setLineDash([]);
 
         ctx.beginPath();
-        ctx.moveTo(x, ROW_POSITIONS["DS_D"] - 10); // start a bit below top
-        ctx.lineTo(x, ROW_POSITIONS["DS_D"] + 10); // end a bit above bottom
+        ctx.moveTo(x, ROW_POSITIONS["DS_D"] - 10);
+        ctx.lineTo(x, ROW_POSITIONS["DS_D"] + 10);
         ctx.stroke();
       } else {
         const color = ICON_COLORS[event.eventCode.id];
@@ -463,9 +450,9 @@ export default function ELDGraph({
       if (e.key === "Escape") {
         sliderSelectionRef.current = { start: 0, end: 0 };
         sliderActiveRef.current = false;
-        setSliderSelection({ start: 0, end: 0 });
-        setSliderActive(false);
-        setSelectedIds(new Set());
+
+        resetSelection();
+
         requestAnimationFrame(draw);
       }
     };
@@ -498,16 +485,7 @@ export default function ELDGraph({
 
   const handleIconClick = (e: React.MouseEvent, event: HosEvent) => {
     e.stopPropagation();
-
-    requestAnimationFrame(() => {
-      const row = document.getElementById(`row-${event._id}`);
-
-      row?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    });
-
+    requestAnimationFrame(draw);
     setFocusedId(event._id);
   };
 
@@ -565,8 +543,9 @@ export default function ELDGraph({
             if (isDragging.current) {
               setSliderActive(sliderActiveRef.current);
 
-              setSliderSelection({
-                ...sliderSelectionRef.current,
+              setSliderSelection(sliderSelectionRef.current, {
+                selectedDay,
+                selectableEvents: events,
               });
             }
 
@@ -578,8 +557,9 @@ export default function ELDGraph({
             if (isDragging.current) {
               setSliderActive(sliderActiveRef.current);
 
-              setSliderSelection({
-                ...sliderSelectionRef.current,
+              setSliderSelection(sliderSelectionRef.current, {
+                selectedDay,
+                selectableEvents: events,
               });
             }
 
@@ -665,7 +645,7 @@ export default function ELDGraph({
                   <Icon
                     key={i}
                     color={color}
-                    size={size ?? ICON_SIZES.default} // ← bigger
+                    size={size ?? ICON_SIZES.default}
                   />
                 ))}
               </div>

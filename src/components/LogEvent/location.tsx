@@ -9,32 +9,50 @@ import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { FaMapMarkedAlt } from "react-icons/fa";
 import type { HosEvent } from "@/lib/types";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
+import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
 
 type LocationProps = {
   event: HosEvent;
+  isLocationError: boolean;
 };
 
-export const Location = ({ event }: LocationProps) => {
+export const Location = ({ event, isLocationError }: LocationProps) => {
   const { updateEvent } = useTransactionContext();
   const disabled = event.i;
   return (
     <ContextMenu>
       <ContextMenuTrigger disabled={disabled} asChild>
-        <div>
+        <div className={cn(isLocationError && "text-error-fg")}>
           {event.location ? (
             <div className="flex items-center gap-4">
               <Dialog>
                 <DialogTrigger asChild>
-                  <button className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                  <button className="cursor-pointer transition-colors hover:text-blue-500">
                     <FaMapMarkedAlt size={16} />
                   </button>
                 </DialogTrigger>
 
                 <DialogContent className="h-[60vh] w-[60vw] max-w-[100vw] p-0">
                   <iframe
-                    src={`https://www.google.com/maps?q=${event.location.lat},${event.location.lon}&z=18&t=k&output=embed`}
+                    src={`https://www.google.com/maps?q=${event.location.lat},${event.location.lon}&z=17&t=k&output=embed`}
                     className="h-full w-full rounded-lg"
                   />
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2">
+                    <Button
+                      variant="ghost"
+                      className="bg-white/80 text-black hover:bg-white"
+                      asChild
+                    >
+                      <a
+                        href={`https://www.google.com/maps?q=${event.location.lat},${event.location.lon}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open in Google Maps
+                      </a>
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
 

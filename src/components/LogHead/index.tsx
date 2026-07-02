@@ -26,8 +26,9 @@ import {
 } from "../ui/popover";
 import { Button } from "../ui/button";
 import { SpaceIcon } from "lucide-react";
-import type { ProviderViolation } from "@/lib/types";
+import type { ProviderViolation, Vehicle } from "@/lib/types";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
+import { FaTruckFront } from "react-icons/fa6";
 
 interface LogHeadProps {
   value: DateTime<true> | DateTime<false>;
@@ -37,7 +38,7 @@ interface LogHeadProps {
   hosTimers: HosTimers;
   selectedDay: DateTime<true>;
   totalMiles: number;
-  vehicles: string[];
+  vehicles: Vehicle[];
   violations: Violation[];
   diagnostics: LogDiagnosticsState;
 }
@@ -70,29 +71,8 @@ const LogHead = ({
   const selectedDaySummary = getSummary(selectedDay.toFormat("yyyy/MM/dd"));
 
   return (
-    <section className="run dev flex w-full items-center gap-4 px-6 py-2 shadow-sm">
+    <section className="flex w-full items-center gap-4 px-6 py-2 shadow-sm">
       <div className="space-y-2">
-        <div className="flex items-center justify-between px-3">
-          <div>
-            {driver?.isConnected ? (
-              <Badge className="flex items-center bg-green-200/20 text-[14px] text-green-600">
-                <MdSignalWifi4Bar size={24} /> Connected
-              </Badge>
-            ) : (
-              <Badge>
-                <MdSignalWifiBad
-                  size={24}
-                  className="flex items-center bg-red-200/20 text-[14px] text-red-500"
-                />{" "}
-                Disconnected
-              </Badge>
-            )}
-          </div>
-          <Badge>
-            <FaRoad />
-            {totalMiles} mi
-          </Badge>
-        </div>
         <DatePicker onChange={onChange} value={value} />
       </div>
       <div className="flex flex-col justify-start gap-2">
@@ -102,12 +82,7 @@ const LogHead = ({
           <DriverSelect driverId={driverId} />
         </div>
       </div>
-      <DriverForm
-        vehicles={vehicles}
-        currentDailySummary={selectedDaySummary}
-        selectedDay={selectedDay}
-        diagnostics={diagnostics}
-      />
+      <DriverForm selectedDay={selectedDay} diagnostics={diagnostics} />
       <Popover>
         <PopoverTrigger asChild>
           <Button

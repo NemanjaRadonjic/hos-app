@@ -1,16 +1,26 @@
-import type { HosEventPayload } from "@/lib/types";
-
-const dutyStatusCodes = ["DS_OFF", "DS_SB", "DS_D", "DS_ON"];
+import { mainEventCodes } from "@/lib/maps";
+import type { HosEvent } from "@/lib/types";
 
 export function findPreviousDutyStatusEvent(
-  events: HosEventPayload[],
+  events: HosEvent[],
   ts: number,
-): HosEventPayload | undefined {
-  return events
-    .filter(
+): HosEvent | undefined {
+  return [...events]
+    .reverse()
+    .find(
       (event) =>
-        dutyStatusCodes.includes(event.eventCode.id) &&
+        mainEventCodes.includes(event.eventCode.id) &&
         event.eventTime.timestamp < ts,
-    )
-    .sort((a, b) => b.eventTime.timestamp - a.eventTime.timestamp)[0];
+    );
+}
+
+export function findNextDutyStatusEvent(
+  events: HosEvent[],
+  ts: number,
+): HosEvent | undefined {
+  return events.find(
+    (event) =>
+      mainEventCodes.includes(event.eventCode.id) &&
+      event.eventTime.timestamp > ts,
+  );
 }

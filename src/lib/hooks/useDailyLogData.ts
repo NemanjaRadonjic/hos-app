@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import {
   getHosEvents,
@@ -11,7 +11,7 @@ import type { HosEvent, DailyLog, DailyLogSummary } from "../types";
 const INITIAL_HISTORY_DAYS = 24;
 export const CHUNK_DAYS = 10;
 
-type Range = { from: DateTime; to: DateTime };
+export type Range = { from: DateTime; to: DateTime };
 
 type DailyLogsPage = {
   eventsData: HosEvent[];
@@ -30,6 +30,33 @@ type FlatDailyLogData = {
   lastKnownEvent: HosEvent | null;
 };
 
+export const flattenDailyLogsData = (
+  data?: InfiniteData<DailyLogsPage, Range>,
+): FlatDailyLogData => ({
+  pages: data?.pages ?? [],
+  pageParams: data?.pageParams ?? [],
+  eventsData: [
+    ...new Map(
+      (data?.pages ?? []).flatMap((p) => p.eventsData).map((e) => [e._id, e]),
+    ).values(),
+  ],
+  dailyLogsData: [
+    ...new Map(
+      (data?.pages ?? [])
+        .flatMap((p) => p.dailyLogsData)
+        .map((l) => [l._id, l]),
+    ).values(),
+  ],
+  dailySummariesData: [
+    ...new Map(
+      (data?.pages ?? [])
+        .flatMap((p) => p.dailySummariesData)
+        .map((s) => [s._id, s]),
+    ).values(),
+  ],
+  lastKnownEvent: data?.pages[0]?.lastKnownEvent ?? null,
+});
+
 export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
   return useInfiniteQuery<
     DailyLogsPage,
@@ -45,28 +72,7 @@ export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
       to: DateTime.now().endOf("day"),
     },
 
-    select: (data) => ({
-      pages: data.pages,
-      pageParams: data.pageParams,
-      eventsData: [
-        ...new Map(
-          data.pages.flatMap((p) => p.eventsData).map((e) => [e._id, e]),
-        ).values(),
-      ],
-      dailyLogsData: [
-        ...new Map(
-          data.pages.flatMap((p) => p.dailyLogsData).map((l) => [l._id, l]),
-        ).values(),
-      ],
-      dailySummariesData: [
-        ...new Map(
-          data.pages
-            .flatMap((p) => p.dailySummariesData)
-            .map((s) => [s._id, s]),
-        ).values(),
-      ],
-      lastKnownEvent: data.pages[0]?.lastKnownEvent ?? null,
-    }),
+    select: flattenDailyLogsData,
 
     queryFn: async ({ pageParam }) => {
       const fmt = (d: DateTime) => d.toFormat("yyyy/MM/dd");

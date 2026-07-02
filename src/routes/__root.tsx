@@ -1,21 +1,26 @@
 import { createRootRoute, Outlet, redirect } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import api from "../lib/axios";
-import Navbar from "@/components/navbar";
+
 import { useCompany } from "@/lib/hooks/useCompany";
 import { supabase } from "@/lib/supabase";
 import { Toaster } from "sonner";
+import { useEffect } from "react";
+import { health } from "@/lib/helpers/health-check";
+import { HealthToast } from "@/components/health-toast";
 
 const RootComponent = () => {
   useCompany();
 
+  useEffect(() => {
+    return health.startAutoPing();
+  }, []);
+
   return (
     <div className="flex h-screen flex-col">
-      {/* <Navbar /> */}
       <main className="min-h-0 flex-1 overflow-auto">
         <Outlet />
-        <Toaster offset={{ bottom: 62 }} />
+        <Toaster richColors offset={{ bottom: 62 }} />
       </main>
+      <HealthToast />
     </div>
   );
 };

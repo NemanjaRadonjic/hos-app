@@ -7,28 +7,25 @@ import type { HosEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { getNoteIcons } from "@/lib/helpers";
-import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
-import { FaLock, FaMapMarkedAlt } from "react-icons/fa";
 import EventCode from "./event-code";
 import { memo } from "react";
 import type { EventInfo } from "@/routes/drivers/$driverId";
-import { MdEditDocument, MdError } from "react-icons/md";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import {
-  BiDuplicate,
   BiError,
   BiSolidDuplicate,
   BiSolidMessageSquareEdit,
   BiSolidTrashAlt,
 } from "react-icons/bi";
 import { Location } from "./location";
-import { Edit } from "lucide-react";
-import { IoRemove } from "react-icons/io5";
-import { HiMiniDocumentDuplicate } from "react-icons/hi2";
-import { HiDocumentRemove, HiDuplicate } from "react-icons/hi";
-import { TbTrashFilled } from "react-icons/tb";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { toast } from "sonner";
+import {
+  isServerLockedEvent,
+  isUserLockedEvent,
+} from "@/lib/hooks/useTransaction";
+import { FaLock, FaUnlock } from "react-icons/fa6";
+import { MdError } from "react-icons/md";
 
 interface LogEventProps {
   event: HosEvent;
@@ -75,10 +72,9 @@ const LogEvent = ({
   setFocusedId,
   setEditingEvent,
 }: LogEventProps) => {
-  const { createEvent, deleteEvent } = useTransactionContext();
+  const { duplicateEvent, deleteEvents, updateEvent } = useTransactionContext();
   const tz = event.eventTime.logDate.timeZone.id;
-
-  const duplicateEvent = (event: HosEvent) => {
+  const handleDuplicateEvent = (event: HosEvent) => {
     const newTimestamp = event.eventTime.timestamp + 1000;
 
     const originalDay = DateTime.fromMillis(event.eventTime.timestamp).toFormat(
@@ -92,13 +88,12 @@ const LogEvent = ({
       return;
     }
 
-    const duplicatedEvent = createEvent({
+    const duplicatedEvent = duplicateEvent({
       ...event,
       eventTime: {
         ...event.eventTime,
         timestamp: newTimestamp,
       },
-      eventComment: "",
     });
     return duplicatedEvent;
   };
@@ -113,6 +108,51 @@ const LogEvent = ({
     {} as Record<string, typeof eventInfo.issues>,
   );
 
+  const isLocked = isServerLockedEvent(event);
+  const isUserLocked = isUserLockedEvent(event);
+
+  const unlockUserLockedEvent = () =>
+    updateEvent(event._id, () => {
+      const { eventComment, ...rest } = event;
+
+      return rest;
+    });
+
+  const isLocationError = eventInfo.issues.some(
+    (issue) => issue.group === "Location",
+  );
+
+  const isOdometerError = eventInfo.issues.some(
+    (issue) => issue.group === "Odometer",
+  );
+
+  const isEngineHoursError = eventInfo.issues.some(
+    (issue) => issue.group === "Engine Hours" && issue.severity === "error",
+  );
+
+  const isEngineHoursWarning = eventInfo.issues.some(
+    (issue) => issue.group === "Engine Hours" && issue.severity === "warning",
+  );
+
+  const isEngineHoursIssue = eventInfo.issues.some(
+    (issue) => issue.group === "Engine Hours",
+  );
+
+  const isOriginError = eventInfo.issues.some(
+    (issue) => issue.group === "Origin",
+  );
+  const engineHoursIssueSeverity = eventInfo.issues.some(
+    (i) => i.group === "Engine Hours" && i.severity === "error",
+  )
+    ? "error"
+    : eventInfo.issues.some(
+          (i) => i.group === "Engine Hours" && i.severity === "warning",
+        )
+      ? "warning"
+      : null;
+
+  // checks if any of the errors are severity error
+  const hasError = eventInfo.issues.some((i) => i.severity === "error");
   return (
     <TableRow
       key={event._id}
@@ -121,16 +161,20 @@ const LogEvent = ({
         transitionDelay: focused ? "0ms" : "0ms",
       }}
       className={cn(
-        "text-xs transition-all duration-200",
-        focused
-          ? "bg-indigo-100 shadow-sm hover:bg-blue-200 dark:bg-blue-900/70"
-          : "hover:bg-muted/50",
-        // eventInfo.hasError && "bg-red-100",
-        event.i && "bg-muted hover:bg-muted",
+        "border-l-2 text-xs transition-all duration-200",
+
+        isLocked
+          ? "bg-muted hover:bg-muted"
+          : focused
+            ? eventInfo.hasError
+              ? "border-l-error-fg bg-error-fg/15 hover:bg-error-fg/20 shadow-sm"
+              : "bg-indigo-100 shadow-sm hover:bg-blue-200 dark:bg-blue-900/70"
+            : eventInfo.hasError
+              ? "border-l-error-fg bg-error-bg hover:bg-error-bg/80"
+              : "hover:bg-muted/50",
       )}
       onClick={() => {
         setFocusedId(event._id);
-        console.log({ eventClicked: event });
       }}
     >
       <TableCell
@@ -140,42 +184,39 @@ const LogEvent = ({
         }}
         className="cursor-pointer"
       >
-        <Checkbox checked={checked} onCheckedChange={() => {}} />
+        <Checkbox checked={checked} />
       </TableCell>
       <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
         {formatTimestampEvent(event.eventTime.timestamp, tz)}
       </TableCell>
       <TableCell>
-        {eventInfo.duration && (
+        {eventInfo.duration != null && eventInfo.duration > 0 && (
           <Badge variant="secondary" className="bg-transparent text-gray-600">
-            {eventInfo.duration != null
-              ? msToHoursMinutes(eventInfo.duration)
-              : ""}
+            {msToHoursMinutes(eventInfo.duration)}
           </Badge>
         )}
       </TableCell>
       <EventCode event={event} setEditingEvent={setEditingEvent} />
-      <TableCell className="text-muted-foreground max-w-[200px] truncate">
-        <Location event={event} />
+      <TableCell className="text-muted-foreground flex max-w-[400px] gap-2 truncate">
+        <Location isLocationError={isLocationError} event={event} />
       </TableCell>
       <TableCell>
         {!!eventInfo.issues.length && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <BiError
-                size={18}
-                className="rounded-sm bg-red-100 fill-red-500 p-[2px]"
-              />
+              <span
+                className={`${hasError ? "text-error-fg" : "text-warning-bg"} flex items-center gap-1`}
+              >
+                <MdError />
+                {eventInfo.issues.length}
+              </span>
             </TooltipTrigger>
 
-            <TooltipContent
-              side="top"
-              className="mb-2 min-w-fit border-red-500/30 bg-red-950 text-red-50"
-            >
+            <TooltipContent side="top" className="mb-2 min-w-fit">
               <div className="my-1 min-w-[250px] space-y-3">
                 {Object.entries(groupedIssues).map(([group, issues]) => (
                   <div key={group}>
-                    <div className="mb-1 border-b border-red-500/20 pb-1 text-xs font-semibold tracking-wide text-red-300 uppercase">
+                    <div className="mb-1 border-b pb-1 text-xs font-semibold tracking-wide uppercase">
                       {group}
                     </div>
 
@@ -185,7 +226,13 @@ const LogEvent = ({
                           key={`${issue.code}-${issue.eventId ?? issue.logDate}-${i}`}
                           className="flex items-center gap-2"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              issue.severity === "error" && "bg-error-fg",
+                              issue.severity === "warning" && "bg-warning",
+                            )}
+                          />
                           <span>{issue.message}</span>
                         </li>
                       ))}
@@ -200,35 +247,49 @@ const LogEvent = ({
       <TableCell className="text-muted-foreground text-center text-xs">
         {event.recordStatus?.id}
       </TableCell>
-      <TableCell className="text-muted-foreground text-center text-xs">
+      <TableCell
+        className={cn(
+          "text-muted-foreground text-center text-xs",
+          isOriginError && "text-error-fg",
+        )}
+      >
         {ORIGIN_MAP[event.recordOrigin?.id]}
       </TableCell>
       <TableCell className="tabular-nums">
-        <div className="flex items-center justify-between">
-          <span className="">{event.totalVehicleMiles}</span>
+        <div className="flex items-center gap-2">
+          <span className={cn(isOdometerError && "text-error-fg")}>
+            {event.totalVehicleMiles}
+          </span>
 
           {eventInfo.odoDelta != null && eventInfo.odoDelta !== 0 && (
-            <Badge
-              variant={eventInfo.odoDelta < 0 ? "destructive" : "success"}
-              className="shadow-xs"
+            <div
+              className={cn(
+                "font-bold",
+                eventInfo.odoDelta < 0 ? "text-error-fg" : "text-success-fg",
+              )}
             >
-              {eventInfo.odoDelta > 0 ? "+" : ""}
-              {eventInfo.odoDelta}
-            </Badge>
+              ({eventInfo.odoDelta > 0 ? "+" : ""}
+              {eventInfo.odoDelta})
+            </div>
           )}
         </div>
       </TableCell>
       <TableCell className="tabular-nums">
-        <div className="flex items-center justify-between">
-          <span className="">{event.totalEngineHours}</span>
+        <div className="flex items-center gap-2">
+          <span className={cn(isEngineHoursError && "text-error-fg")}>
+            {event.totalEngineHours}
+          </span>
           {eventInfo.engHoursDelta != null && eventInfo.engHoursDelta !== 0 && (
-            <Badge
-              variant={eventInfo.engHoursDelta < 0 ? "destructive" : "success"}
-              className="shadow-xs"
+            <div
+              className={cn(
+                "text-success-fg font-bold",
+                engineHoursIssueSeverity === "error" && "text-error-bg",
+                engineHoursIssueSeverity === "warning" && "text-warning-bg",
+              )}
             >
-              {eventInfo.engHoursDelta > 0 ? "+" : ""}
-              {eventInfo.engHoursDelta.toFixed(1)}
-            </Badge>
+              ({eventInfo.engHoursDelta > 0 ? "+" : ""}
+              {eventInfo.engHoursDelta.toFixed(1)})
+            </div>
           )}
         </div>
       </TableCell>
@@ -243,8 +304,16 @@ const LogEvent = ({
         )}
       </TableCell>
       <TableCell className="flex items-center justify-center gap-2 text-lg">
-        {event.i ? (
+        {isLocked ? (
           <FaLock className="text-muted-foreground size-4" />
+        ) : isUserLocked ? (
+          <button
+            onClick={unlockUserLockedEvent}
+            className="group cursor-pointer"
+          >
+            <FaLock className="size-4 group-hover:hidden" />
+            <FaUnlock className="hidden size-4 text-blue-500 group-hover:block" />
+          </button>
         ) : (
           <>
             <BiSolidMessageSquareEdit
@@ -266,7 +335,7 @@ const LogEvent = ({
 
             <BiSolidTrashAlt
               className="text-muted-foreground hover:text-destructive cursor-pointer transition-colors duration-150"
-              onClick={() => deleteEvent(event._id)}
+              onClick={() => deleteEvents(event._id)}
             />
           </>
         )}

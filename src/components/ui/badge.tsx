@@ -13,16 +13,19 @@ const badgeVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+          "flex items-center bg-[var(--hos-DS_OFF-bg)] text-[var(--hos-DS_OFF-fg)]",
+
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
         error: "flex items-center bg-red-200/20 text-red-500",
-        success:
-          "flex items-center bg-[var(--hos-DS_D-fg)] text-[var(--hos-DS_D-bg)]",
-        warning: "flex items-center bg-warning/20 text-[14px] text-warning",
+        error_filled: "flex items-center bg-error-fg text-error-bg",
+        success: "flex items-center bg-success-bg text-success-fg",
+        success_filled: "flex items-center bg-success-fg text-success-bg",
+        warning: "flex items-center bg-warning/20 text-warning",
+        warning_filled: "flex items-center bg-warning-bg text-warning-fg",
       },
       size: {
         sm: "[&>svg]:size-3",

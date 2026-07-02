@@ -1,7 +1,7 @@
 import { FaTrailer, FaTruckFront } from "react-icons/fa6";
 import { IoDocumentText } from "react-icons/io5";
 import { Badge } from "../ui/badge";
-import { MdEdit } from "react-icons/md";
+import { MdEdit, MdEditDocument } from "react-icons/md";
 import { BiSolidCertification, BiSolidError } from "react-icons/bi";
 import { TbClipboardCheckFilled, TbClipboardXFilled } from "react-icons/tb";
 
@@ -10,12 +10,11 @@ import { ShippingForm } from "./shipping-form";
 import { useState } from "react";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import type { LogIssue } from "@/lib/log-check";
+import { Button } from "../ui/button";
 
 type DriverFormProps = {};
 
 export default function DriverForm({
-  vehicles,
-  currentDailySummary,
   selectedDay,
   diagnostics,
 }: DriverFormProps) {
@@ -32,30 +31,8 @@ export default function DriverForm({
   const certError = certIssue?.message ?? null;
   const hasCert = dayDiagnostics?.derived.isCertified ?? false;
   return (
-    <div className="flex flex-1 gap-4">
+    <div className="flex flex-1 items-center gap-4">
       <div className="flex items-center gap-2">
-        <div className="flex flex-col space-y-2">
-          <Badge className="flex items-center gap-2">
-            <FaTruckFront />
-            {vehicles.length ? vehicles?.map((v) => v.name) : "None"}
-          </Badge>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Badge className="cursor-pointer">
-                <MdEdit />
-                Form
-              </Badge>
-            </DialogTrigger>
-            <DialogContent className="w-lg overflow-visible">
-              <ShippingForm
-                selectedDay={selectedDay}
-                dailyLog={dailyLog}
-                updateDailyLog={updateDailyLog}
-                closeDialog={() => setOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
         <div className="flex flex-col space-y-2">
           <div className="flex items-start gap-2">
             <div className="flex flex-wrap gap-1">
@@ -133,6 +110,21 @@ export default function DriverForm({
           ) : null}
         </div>
       </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button className="cursor-pointer">
+            <MdEditDocument />
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="w-lg overflow-visible">
+          <ShippingForm
+            selectedDay={selectedDay}
+            dailyLog={dailyLog}
+            updateDailyLog={updateDailyLog}
+            closeDialog={() => setOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

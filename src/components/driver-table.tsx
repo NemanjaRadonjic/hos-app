@@ -30,7 +30,7 @@ declare module "@tanstack/react-table" {
   }
 }
 
-const columns: ColumnDef<DriverTableData>[] = [
+const columns: ColumnDef<DriverSimplified>[] = [
   {
     accessorKey: "name",
     header: "Driver",

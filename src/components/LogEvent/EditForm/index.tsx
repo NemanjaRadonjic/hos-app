@@ -15,7 +15,6 @@ import { useEffect, useState } from "react";
 import type { Draft, DraftEventErrors, EventFamily } from "../helpers/types";
 import type { HosEvent } from "@/lib/types";
 import { getCalculatedLocationData } from "@/lib/helpers/get-calculated-location";
-import { getEventFamily } from "./helpers/get-event-family";
 import { buildDraft } from "./build-draft";
 import { validateDraft } from "./validate-form";
 import {
@@ -27,19 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { MdError } from "react-icons/md";
-import {
-  buildAuthEventType,
-  buildBasicEventType,
-  buildCertEventType,
-  buildDiagEventType,
-} from "./event-type-bodies";
 import DatePicker from "@/components/ui/date-picker";
 import { DateTime } from "luxon";
 import VehicleSelect from "./fields/vehicle-select";
 import EldSelect from "./fields/eld-select";
-import { IoWarning } from "react-icons/io5";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import DateAndTimePicker from "@/components/ui/date-time-picker";
@@ -140,7 +130,6 @@ export function EditEventModal({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  console.count("EditEventModal render");
   const { updateEvent } = useTransactionContext();
   const { vehicles, elds } = useDriversData();
 
@@ -231,7 +220,7 @@ export function EditEventModal({
     if (!event) return null;
 
     const payload = buildPayload({ original: event, draft: draft });
-
+    console.log({ payload });
     if (payload) {
       updateEvent(event._id, () => payload);
     }

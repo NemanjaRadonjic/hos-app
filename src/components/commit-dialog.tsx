@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { CommitProgress } from "@/lib/hooks/useTransaction";
+import { Spinner } from "./ui/spinner";
+import { useHealth } from "@/lib/helpers/health-check";
+import { LogCheckList } from "./log-check-list";
+import { DateTime } from "luxon";
 
 type CommitPhase = "confirm" | "saving" | "success" | "error";
 
@@ -27,6 +31,7 @@ export function CommitDialog({
   progress,
   stats,
   diagnostics,
+  handleIssueClick,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -35,7 +40,9 @@ export function CommitDialog({
   progress: CommitProgress;
   stats: SaveStats;
   diagnostics: LogDiagnosticsState;
+  handleIssueClick: (issue: LogIssue) => void;
 }) {
+  const health = useHealth();
   const percent =
     progress.total === 0
       ? 0
@@ -45,16 +52,14 @@ export function CommitDialog({
 
   const issues = diagnostics.issues;
 
-  const groupedIssues = Object.values(
-    issues.reduce(
-      (acc, issue) => {
-        acc[issue.logDate] ??= [];
-        acc[issue.logDate].push(issue);
-        return acc;
-      },
-      {} as Record<string, typeof issues>,
-    ),
-  );
+  // commit dialog will cutoff issues for now
+  const cutoffDate = DateTime.now().minus({ days: 7 }).toFormat("yyyy/MM/dd");
+
+  const recentDiagnostics = {
+    ...diagnostics,
+    issues: diagnostics.issues.filter((issue) => issue.logDate >= cutoffDate),
+  };
+
   return (
     <Dialog open={open} onOpenChange={saving ? undefined : onOpenChange}>
       <DialogContent className="w-2xl">
@@ -80,7 +85,7 @@ export function CommitDialog({
               <div>Total requests: {stats.totalRequests}</div>
             </div>
 
-            <div className="rounded-md border p-3">
+            <div className="flex flex-col">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                   {issues.length > 0 ? (
@@ -90,42 +95,13 @@ export function CommitDialog({
                   )}
                   Log diagnostics
                 </div>
-
-                <span className="text-muted-foreground text-xs">
-                  {issues.length} {issues.length === 1 ? "issue" : "issues"}
-                </span>
               </div>
 
-              {issues.length === 0 ? (
-                <div className="text-muted-foreground text-sm">
-                  No log issues found.
-                </div>
-              ) : (
-                <div className="max-h-48 space-y-3 overflow-auto pr-1">
-                  {groupedIssues.map((dayIssues) => (
-                    <div
-                      key={dayIssues[0].logDate}
-                      className="bg-muted/40 rounded-md p-2"
-                    >
-                      <div className="mb-1 text-xs font-semibold">
-                        {dayIssues[0].logDate}
-                      </div>
-
-                      <div className="space-y-1">
-                        {dayIssues.map((issue) => (
-                          <div
-                            key={issue.id}
-                            className="flex items-start gap-2 text-sm text-red-600"
-                          >
-                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                            <span>{issue.message}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <LogCheckList
+                diagnostics={recentDiagnostics}
+                handleIssueClick={handleIssueClick}
+                setOpen={onOpenChange}
+              />
             </div>
           </div>
         )}
@@ -144,13 +120,11 @@ export function CommitDialog({
               · {progress.failed} failed
             </div>
 
-            {progress.retrying && (
+            {progress.waiting && (
               <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
-                <div className="font-medium">Retrying request</div>
-                <div className="text-xs">{progress.retrying.label}</div>
-                <div className="mt-1 text-xs">
-                  Attempt {progress.retrying.attempt} · retrying in{" "}
-                  {Math.round(progress.retrying.delayMs / 1000)}s
+                <div className="text-xs">{progress.waiting.label}</div>
+                <div className="mt-1 flex gap-2 text-xs">
+                  <Spinner /> Server unresponsive - waiting for response
                 </div>
               </div>
             )}
@@ -175,7 +149,12 @@ export function CommitDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={onConfirm}>Commit changes</Button>
+              <Button
+                disabled={health.status !== "healthy"}
+                onClick={onConfirm}
+              >
+                Commit changes
+              </Button>
             </>
           )}
 

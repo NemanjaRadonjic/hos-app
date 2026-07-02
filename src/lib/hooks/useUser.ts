@@ -11,3 +11,5 @@ export const useUser = (userId: string) => {
 
   return { user: data, isUserFetching: isFetching };
 };
+
+// NOT NEEDED ?

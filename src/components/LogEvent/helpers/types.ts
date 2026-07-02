@@ -34,20 +34,31 @@ export type Draft = {
 
 export type ClientHosEventBase = {
   _id: string;
+  _rev: string;
   companyId: string;
   userId: string;
+
+  createdBy: string;
+  createdAt: number;
+  updatedBy: string;
+  updatedAt: number;
+
   seqId: string;
   isLive: boolean;
   eventCode: { id: string };
   eventTime: HosEvent["eventTime"];
   vehicle: HosEvent["vehicle"];
+
   suggestedEditEventIds: string[];
-  type: { id: "HosEvent" };
-  dSTime: number;
-  dId: string;
+
+  av?: string;
   pd: boolean;
   at: boolean;
-  av?: string;
+
+  type: HosEvent["type"];
+  dSTime: number;
+  dId: string;
+  stime: number;
 };
 
 export type CertHosEvent = ClientHosEventBase & {
@@ -58,44 +69,18 @@ export type CertHosEvent = ClientHosEventBase & {
   };
 };
 
-// export type BasicHosEvent = ClientHosEventBase & {
-//   recordOrigin?: { id: string };
-//   recordStatus?: { id: string };
-//   location?: {
-//     calculatedLocation: string;
-//     lat: number;
-//     lon: number;
-//     source: string;
-//     state: string;
-//     timestamp: number;
-//   };
-//   eld?: {
-//     id: string;
-//     serialNumber: string;
-//     sn: string;
-//   };
-//   totalVehicleMiles?: number;
-//   totalEngineHours?: number;
-// };
-
-export type BasicHosEventStrict = ClientHosEventBase & {
-  recordOrigin: { id: string };
-  recordStatus: { id: string };
-  location: {
-    calculatedLocation: string;
-    lat: number;
-    lon: number;
-    source: string;
-    state: string;
-    timestamp: number;
-  };
-  eld: {
+export type BasicHosEvent = ClientHosEventBase & {
+  recordOrigin?: { id: string };
+  recordStatus?: { id: string };
+  location?: HosEvent["location"];
+  eld?: {
     id: string;
     serialNumber: string;
     sn: string;
   };
-  totalVehicleMiles: number;
-  totalEngineHours: number;
+  totalVehicleMiles?: number;
+  totalEngineHours?: number;
+  eventComment?: string;
 };
 
 export type AuthHosEvent = ClientHosEventBase & {

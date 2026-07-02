@@ -1,17 +1,23 @@
+import { DateTime } from "luxon";
+import { mainEventCodes } from "@/lib/maps";
 import type { LogIssue } from "@/lib/log-check";
-import type { HosEvent, HosEventPayload } from "@/lib/types";
+import type { HosEvent } from "@/lib/types";
+
+const CT_ZONE = "America/Chicago";
 
 export type EnrichedEvent = {
-  event: HosEvent | HosEventPayload;
+  event: HosEvent;
   info: {
+    duration: number | null;
     odoDelta: number | null;
     engHoursDelta: number | null;
     issues: LogIssue[];
+    hasError: boolean;
   };
 };
 
 export function enrichEvents(
-  events: HosEventPayload[],
+  events: HosEvent[],
   issues: LogIssue[] = [],
 ): EnrichedEvent[] {
   const issuesByEventId = new Map<string, LogIssue[]>();
@@ -24,10 +30,21 @@ export function enrichEvents(
     issuesByEventId.set(issue.eventId, list);
   }
 
-  let lastNonCertEvent: HosEventPayload | null = null;
+  let lastNonCertEvent: HosEvent | null = null;
 
-  return events.map((event) => {
+  return events.map((event, index) => {
     const isCert = event.eventCode.id.startsWith("DR_CERT_");
+    const isMainStatus = mainEventCodes.includes(event.eventCode.id);
+
+    const nextMainStatus = events
+      .slice(index + 1)
+      .find((next) => mainEventCodes.includes(next.eventCode.id));
+
+    const duration = isMainStatus
+      ? (nextMainStatus?.eventTime.timestamp ??
+          DateTime.now().setZone(CT_ZONE).toMillis()) -
+        event.eventTime.timestamp
+      : null;
 
     const odoDelta =
       !isCert &&
@@ -47,16 +64,16 @@ export function enrichEvents(
       lastNonCertEvent = event;
     }
 
+    const eventIssues = issuesByEventId.get(event._id) ?? [];
+
     return {
       event,
       info: {
+        duration,
         odoDelta,
         engHoursDelta,
-        issues: issuesByEventId.get(event._id) ?? [],
-        hasError:
-          issuesByEventId
-            .get(event._id)
-            ?.some((issue) => issue.severity === "error") ?? false,
+        issues: eventIssues,
+        hasError: eventIssues.some((issue) => issue.severity === "error"),
       },
     };
   });

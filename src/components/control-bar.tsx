@@ -6,13 +6,16 @@ import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { getTokenPayload } from "@/lib/helpers";
 import { CommitDialog } from "./commit-dialog";
-import { BiCertification } from "react-icons/bi";
+import { BiCertification, BiSolidTrashAlt } from "react-icons/bi";
 import { FaCertificate } from "react-icons/fa6";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 import type { CommitProgress } from "@/lib/hooks/useTransaction";
 import { LogCheck } from "./log-check-dialog";
 import { supabase } from "@/lib/supabase";
 import { TbRoute2 } from "react-icons/tb";
+import { useSelectionStore } from "@/lib/store/useSelectionStore";
+import { DateTime } from "luxon";
+import type { LogIssue } from "@/lib/log-check";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
@@ -23,8 +26,6 @@ type ControlBarProps = {
 type CommitPhase = "confirm" | "saving" | "success" | "error";
 
 export default function ControlBar({
-  selectedIds,
-  resetSelection,
   updateEventsTimestamp,
   selectDuration,
   transactionStatus,
@@ -33,8 +34,18 @@ export default function ControlBar({
   setFocusedId,
   diagnostics,
 }: ControlBarProps) {
-  const { events, commit, reset, status, getSaveStats, fixCert, fixInt } =
-    useTransactionContext();
+  const {
+    events,
+    commit,
+    reset,
+    status,
+    deleteEvents,
+    getSaveStats,
+    fixCert,
+    fixInt,
+  } = useTransactionContext();
+  const selectedIds = useSelectionStore((s) => s.selectedIds);
+  const resetSelection = useSelectionStore((s) => s.resetSelection);
 
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitPhase, setCommitPhase] = useState<CommitPhase>("confirm");
@@ -43,7 +54,7 @@ export default function ControlBar({
     total: 0,
     success: 0,
     failed: 0,
-    retrying: null,
+    waiting: null,
   });
 
   const stats = getSaveStats();
@@ -60,7 +71,12 @@ export default function ControlBar({
     ? events.find((event) => event._id === selectedId)
     : undefined;
 
-  const canFixInt = count === 1 && selectedEvent?.eventCode.id === "DS_D";
+  const canFixInt =
+    count === 1 &&
+    selectedEvent?.eventCode.id === "DS_D" &&
+    !diagnostics.issues.some((issue) => issue.eventId === selectedEvent._id);
+
+  const hasSelection = count > 0;
 
   const handleSubmit = () => {
     const h = parseInt(hours || "0", 10);
@@ -75,6 +91,14 @@ export default function ControlBar({
     resetSelection();
   };
 
+  function handleIssueClick(issue: LogIssue) {
+    setSelectedDay(DateTime.fromFormat(issue.logDate, "yyyy/MM/dd"));
+
+    if (issue.eventId) {
+      setFocusedId(issue.eventId);
+    }
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter") handleSubmit();
@@ -86,21 +110,16 @@ export default function ControlBar({
   return (
     <div className="bg-background border-border flex items-center gap-3 rounded-md border px-4 py-2 shadow-sm">
       <Clock className="text-muted-foreground h-4 w-4 shrink-0" />
-
-      <span className="text-muted-foreground text-sm">
+      <span className="text-muted-foreground w-32 text-sm">
         <span className="text-foreground font-medium">{count}</span>{" "}
         {count === 1 ? "event" : "events"} selected
       </span>
-
       <div className="bg-border h-4 w-px" />
-
-      <span className="text-muted-foreground text-sm">
+      <span className="text-muted-foreground w-36 text-sm">
         <span className="text-foreground font-medium">Duration:</span>{" "}
         {selectDuration ? msToHoursMinutes(selectDuration) : "No selection"}
       </span>
-
       <div className="bg-border h-4 w-px" />
-
       <div className="flex items-center gap-1">
         <TimeInput
           value={hours}
@@ -124,13 +143,21 @@ export default function ControlBar({
           max={59}
           allowNegative
         />
-        <Button onClick={handleSubmit}>Apply</Button>
+        <Button disabled={!hasSelection} onClick={handleSubmit}>
+          Apply
+        </Button>
       </div>
-
+      <div className="bg-border h-4 w-px" />
       <div>
-        <Button onClick={() => fixCert(selectedDay)}>
-          <FaCertificate className="size-3" />
-          Fix Cert
+        <Button
+          disabled={!hasSelection}
+          onClick={() => {
+            deleteEvents(selectedIds);
+            resetSelection();
+          }}
+        >
+          <BiSolidTrashAlt className="size-3" />
+          Delete
         </Button>
       </div>
       <div>
@@ -146,11 +173,15 @@ export default function ControlBar({
           Fix Int
         </Button>
       </div>
-
+      <div>
+        <Button onClick={() => fixCert(selectedDay)}>
+          <FaCertificate className="size-3" />
+          Fix Cert
+        </Button>
+      </div>
       <div className="ml-auto flex items-center gap-2">
         <LogCheck
-          setSelectedDay={setSelectedDay}
-          setFocusedId={setFocusedId}
+          handleIssueClick={handleIssueClick}
           diagnostics={diagnostics}
         />
 
@@ -182,7 +213,7 @@ export default function ControlBar({
             total: stats.totalRequests,
             success: 0,
             failed: 0,
-            retrying: null,
+            waiting: null,
           });
 
           const result = await commit(setCommitProgress);
@@ -195,6 +226,7 @@ export default function ControlBar({
           setCommitPhase(result.failed.length > 0 ? "error" : "success");
         }}
         diagnostics={diagnostics}
+        handleIssueClick={handleIssueClick}
       />
     </div>
   );
@@ -218,17 +250,37 @@ function TimeInput({
       className="w-14 text-center font-mono text-sm"
       placeholder={placeholder}
       value={value}
+      onWheel={(e) => {
+        e.preventDefault();
+
+        const current = value === "" || value === "-" ? 0 : parseInt(value, 10);
+
+        let next = current + (e.deltaY < 0 ? 1 : -1);
+
+        if (!allowNegative) {
+          next = Math.max(0, next);
+        }
+
+        if (max !== undefined) {
+          next = Math.min(max, next);
+        }
+
+        onChange(next.toString());
+      }}
       onChange={(e) => {
         const raw = e.target.value;
-        // allow minus sign at start if negative allowed
+
         if (allowNegative && raw === "-") {
           onChange("-");
           return;
         }
+
         const val = allowNegative
           ? raw.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "")
           : raw.replace(/\D/g, "");
+
         const num = parseInt(val, 10);
+
         if (val === "" || val === "-" || !max || Math.abs(num) <= max) {
           onChange(val);
         }

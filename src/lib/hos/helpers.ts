@@ -3,6 +3,7 @@ import { getTokenPayload } from "../helpers";
 import { mainEventCodes } from "../maps";
 import type {
   Company,
+  DailyLog,
   DailyLogBase,
   DailyLogSummaryBase,
   HosEvent,
@@ -64,38 +65,47 @@ export const buildDailyLog = ({
 }: BuildDailyLogProps) => {
   const { id, cid } = getTokenPayload().user;
 
-  const dailyLogBody: DailyLogBase = {
+  const dailyLogBody: DailyLog = {
     _id: dailyLogId,
+    _rev: "",
+    companyId: cid,
     userId: driver.id,
+    createdBy: id,
+    createdAt: DateTime.now().toMillis(),
+    updatedBy: id,
+    updatedAt: DateTime.now().toMillis(),
     logDate: {
       date: selectedDay.toFormat("yyyy/MM/dd"),
-      logStartOffset: 0,
       timeZone: {
         id: "CT",
       },
+      logStartOffset: 0,
     },
     form: {
-      // coDriver ?
+      coDriver: undefined,
       driver: driver.dataAsDriver,
       trailers: [],
       vehicles: [{ ...driver.vehicle }],
       shippingDocuments: [],
       company: {
-        city: company.city,
-        dotNumber: company.dotNumber,
         id: company._id,
         name: company.name,
         state: company.state,
-        street: company.street,
         terminals: company.terminals,
         timeZone: company.timeZone,
+        street: company.street,
+        city: company.city,
         zipCode: company.zipCode,
+        dotNumber: company.dotNumber,
       },
-      lud: true,
+      lud: true, // why is this true ?
       cl: false,
+      signature: undefined,
     },
     type: { id: "DailyLog" },
+    stime: DateTime.now().toMillis(),
     dSTime: -1,
+    dId: driver.dId,
   };
   return dailyLogBody;
 };

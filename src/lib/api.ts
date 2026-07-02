@@ -1,11 +1,6 @@
 import api from "./axios";
 import { supabase } from "./supabase";
-import type {
-  DailyLog,
-  DailyLogSummary,
-  HosEvent,
-  HosEventPayload,
-} from "./types";
+import type { DailyLog, DailyLogSummary, HosEvent } from "./types";
 
 export const getUsers = async () => {
   const { data } = await api.get("/users");
@@ -154,7 +149,7 @@ export const upsertDailyLogSummary = async (
   return data;
 };
 
-export const upsertHosEvent = async (id: string, payload: HosEventPayload) => {
+export const upsertHosEvent = async (id: string, payload: HosEvent) => {
   const { data } = await api.put(`/hos_events/${id}`, payload, {
     params: {
       "$client[ignoreRev]": true,

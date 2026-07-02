@@ -127,3 +127,7 @@ export function getCalculatedLocationData(lat: number, lon: number) {
     state: STATE_NAMES[city.state],
   };
 }
+
+export function getStateFromCalculatedLocation(location?: string | null) {
+  return location?.match(/,\s*([A-Z]{2})$/)?.[1] ?? null;
+}

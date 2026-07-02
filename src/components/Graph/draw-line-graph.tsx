@@ -3,10 +3,13 @@ import { minutesToHours } from "@/lib/helpers";
 import type { HosEvent } from "@/lib/types";
 import type { DutyEvent, EventCode, GraphSizes, RowPositions } from "./types";
 import { GRAPH_STATUS_COLORS } from "./constants";
+import { getStateSpeedLimit } from "@/lib/helpers/speed-limit";
+import { getStateFromCalculatedLocation } from "@/lib/helpers/get-calculated-location";
 
 type DrawLineGraphProps = {
   ctx: CanvasRenderingContext2D;
   mainEvents: HosEvent[];
+  interlocationEvents: HosEvent[];
   dutyEvents: DutyEvent[];
   ROW_POSITIONS: RowPositions;
   isSelectedDayToday: boolean;
@@ -19,6 +22,7 @@ export default function drawLineGraph({
   dutyEvents,
   ROW_POSITIONS,
   mainEvents,
+  interlocationEvents,
   isSelectedDayToday,
   selectedDay,
   GRAPH_SIZES,
@@ -102,17 +106,45 @@ export default function drawLineGraph({
       );
     }
 
+    // mph
     if (
       event.status === "DS_D" &&
-      duration > 20 &&
+      duration >= 15 &&
       event.nextMiles != null &&
       event.miles != null
     ) {
       const mph = Math.round((event.nextMiles - event.miles) / (duration / 60));
-      if (mph > 0 && mph < 200) {
-        ctx.fillStyle = GRAPH_STATUS_COLORS["DS_D"];
+
+      const points = [
+        mainEvents[i],
+        ...interlocationEvents.filter((e) => {
+          const ts = e.eventTime.timestamp;
+          return ts > startTs && ts < endTs;
+        }),
+        mainEvents[i + 1],
+      ].filter(Boolean);
+
+      const limits = points
+        .slice(0, -1)
+        .map((e) =>
+          getStateFromCalculatedLocation(e.location?.calculatedLocation),
+        )
+        .map((state) => (state ? getStateSpeedLimit(state) : null))
+        .filter((limit) => limit != null);
+
+      const speedLimit = limits.length
+        ? Math.floor(
+            limits.reduce((sum, limit) => sum + limit, 0) / limits.length,
+          )
+        : null;
+
+      if (mph > 0 && speedLimit != null) {
+        const styles = getComputedStyle(document.documentElement);
+        const warningColor = styles.getPropertyValue("--error").trim();
+        ctx.fillStyle =
+          mph > speedLimit ? warningColor : GRAPH_STATUS_COLORS["DS_D"];
         ctx.font = `500 ${fontSize}px Inter, system-ui, sans-serif`;
-        ctx.fillText(`${mph} mph`, centerX, y + lineWidth * 4);
+        ctx.fillText(`${mph} mph`, centerX, y + 2 + lineWidth * 4);
       }
     }
   });

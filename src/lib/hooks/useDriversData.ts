@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useLatestDriverStatuses } from "./useLatestDriverStatuses";
 import { useUsers } from "./useUsers";
 import { useVehicles } from "./useVehicles";
-import type { DriverInfo, User, Vehicle } from "../types";
+import type { DriverInfo, Vehicle } from "../types";
 
 type TimeRule = {
   accumulatedRestartTime: number;
@@ -26,8 +26,8 @@ export type DriverSimplified = {
   status: string;
   isConnected: boolean;
   location: string;
+  phone: string;
   vehicle: { id: string; name: string; vin: string };
-  totalMiles?: number;
 
   breakTime: TimeRule;
   driveTime: TimeRule;
@@ -61,7 +61,7 @@ export const useDriversData = (): UseDriversDataResult => {
     vin: v.vin,
   }));
 
-  const drivers = useMemo(() => {
+  const drivers: DriverSimplified[] = useMemo(() => {
     return statuses
       .filter((status) => {
         const driver = users.find((u) => u._id === status.userId);
@@ -69,7 +69,10 @@ export const useDriversData = (): UseDriversDataResult => {
       })
       .map((status) => {
         const driver = users.find((u) => u._id === status.userId)!;
-        const vehicle = vehicles.find((v) => v._id === status.vehicle.id);
+        console.log({ driver });
+        const vehicle = vehicles.find(
+          (v: Vehicle) => v._id === status.vehicle.id,
+        );
 
         return {
           id: status.userId,
@@ -81,6 +84,7 @@ export const useDriversData = (): UseDriversDataResult => {
           vehicle: { ...status.vehicle, name: vehicle?.name },
           status: status.hosEvent.eventCode.id,
           location: status.location?.calculatedLocation || "Unknown Location",
+          phone: driver.phoneNum,
           driveTime: status.driveTime,
           shiftTime: status.shiftTime,
           breakTime: status.breakTime,
@@ -88,19 +92,19 @@ export const useDriversData = (): UseDriversDataResult => {
           totalMiles: status.hosEvent.totalVehicleMiles,
           isConnected: status.ec,
           dataAsCoDriver: {
-            driverInfo: driver?.driverInfo as DriverInfo,
-            id: driver?._id ?? "",
+            email: driver?.email ?? "",
             firstName: driver?.firstName ?? "",
             lastName: driver?.lastName ?? "",
-            email: driver?.email ?? "",
+            driverInfo: driver?.driverInfo as DriverInfo,
+            id: driver?._id ?? "",
           },
           dataAsDriver: {
-            avu: driver?.avu,
-            driverInfo: driver?.driverInfo as DriverInfo,
-            id: driver?._id ?? "",
+            email: driver?.email ?? "",
             firstName: driver?.firstName ?? "",
             lastName: driver?.lastName ?? "",
-            email: driver?.email ?? "",
+            driverInfo: driver?.driverInfo as DriverInfo,
+            avu: driver?.avu,
+            id: driver?._id ?? "",
           },
         };
       });

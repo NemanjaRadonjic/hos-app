@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import type {
@@ -6,11 +6,14 @@ import type {
   DailyLog,
   DailyLogSummary,
   DailyLogForm,
-  HosEventPayload,
 } from "../types";
-import { CHUNK_DAYS, useDailyLogsData } from "./useDailyLogData";
+import {
+  CHUNK_DAYS,
+  flattenDailyLogsData,
+  useDailyLogsData,
+  type Range,
+} from "./useDailyLogData";
 import { useCompany } from "./useCompany";
-import { getTokenPayload } from "../helpers";
 import {
   buildDailyLog,
   buildDailyLogSummary,
@@ -29,7 +32,6 @@ import { findNearestSignature } from "./helpers/find-nearest-signature";
 import { toast } from "sonner";
 import { findCertAnchorEvent } from "./helpers/find-cert-anchor";
 import { isDayCertified } from "./helpers/check-date-certified";
-import type { CertHosEvent } from "@/components/LogEvent/helpers/types";
 import { runQueue, type QueueItem } from "../helpers/api-helpers";
 import { buildInterlocations } from "./helpers/build-interlocations";
 import { buildBasicEventType } from "@/components/LogEvent/EditForm/event-type-bodies";
@@ -37,17 +39,36 @@ import { getCalculatedLocationData } from "../helpers/get-calculated-location";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
 
+const toArray = (input: HosEvent | HosEvent[]) =>
+  Array.isArray(input) ? input : [input];
+
+export function isServerLockedEvent(input: HosEvent | HosEvent[]): boolean {
+  return toArray(input).some((event) => event.i);
+}
+
+export function isUserLockedEvent(input: HosEvent | HosEvent[]): boolean {
+  return toArray(input).some((event) => event.eventComment === "test");
+}
+
+export function isLockedEvent(input: HosEvent | HosEvent[]): boolean {
+  return toArray(input).some(
+    (event) => event.i || event.eventComment === "test",
+  );
+}
+
+const toastLocked = () => {
+  toast.error("Locked events cannot be changed.");
+};
+
 export type CommitProgress = {
   done: number;
   total: number;
   success: number;
   failed: number;
   current?: string;
-  retrying?: {
-    id: string;
+  waiting: {
+    reason: "server";
     label: string;
-    attempt: number;
-    delayMs: number;
   } | null;
 };
 
@@ -60,10 +81,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const { driver } = useDriverData(userId);
   const { data: company } = useCompany();
 
-  const [status, setStatus] = useState<TransactionStatus>("idle");
-  // ─── server data ─────────────────────────────────────────────────────────
-  // useDailyLogsData fetches everything from the server and caches it
-  // we never mutate this cache — it stays as the ground truth / original snapshot
+  // cache
   const {
     data,
     fetchNextPage: fetchPreviousRange,
@@ -71,17 +89,41 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     isFetchingNextPage: isFetchingMore,
   } = useDailyLogsData(userId, selectedDay);
 
-  const lastKnownEvent = data?.lastKnownEvent ?? null;
+  const [status, setStatus] = useState<TransactionStatus>("idle");
 
-  // ─── local mutable state ──────────────────────────────────────────────────
-  // events get copied into local state because they can be heavily mutated
-  // (timestamp shifts, status changes, etc.)
-  const [events, setEvents] = useState<HosEventPayload[]>([]);
+  const [events, _setEvents] = useState<HosEvent[]>([]);
+  const setEvents = (next: HosEvent[] | ((prev: HosEvent[]) => HosEvent[])) => {
+    _setEvents((prev) => {
+      const nextEvents = typeof next === "function" ? next(prev) : next;
+      return sortEvents(nextEvents);
+    });
+  };
 
-  // dailyLogEdits is a sparse delta — only the fields that changed per log id
   const [dailyLogEdits, setDailyLogEdits] = useState<Record<string, DailyLog>>(
     {},
   );
+
+  // handle status state directly from the diffing
+  useEffect(() => {
+    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
+
+    const isChanged =
+      changedEvents.length > 0 ||
+      changedLogs.length > 0 ||
+      deletedEventIds.length > 0;
+
+    const nextStatus = isChanged ? "pending" : "idle";
+
+    setStatus((prev) => {
+      if (prev === "error") return prev;
+      if (prev === nextStatus) return prev;
+
+      return nextStatus;
+    });
+  }, [userId, events, dailyLogEdits, data]);
+
+  const getSummary = (date: string) =>
+    data?.dailySummariesData.find((s) => s.logDate.date === date);
 
   // ─── sync events from cache into local state ──────────────────────────────
   // only re-syncs when a new page is fetched (pageCount changes)
@@ -104,11 +146,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       (pageCount > 0 || lastSyncedUserId.current !== userId)
     ) {
       lastSyncedUserId.current = userId;
-      setEvents(
-        [...eventsData].sort(
-          (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
-        ),
-      );
+      setEvents(eventsData);
     } else if (lastSyncedUserId.current !== userId) {
       lastSyncedUserId.current = userId;
       setEvents([]);
@@ -127,63 +165,47 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     }
   }, [selectedDay, pageCount]);
 
-  const isLockedEvent = (event?: HosEventPayload | HosEvent | null) =>
-    Boolean(event?.i);
-
-  const toastLocked = () => {
-    toast.error("Locked/inactive events cannot be changed.");
-  };
-
-  const createEvent = (event: HosEvent | HosEventPayload) => {
+  // in reality, currently, this is dependant on an another event
+  // its used on duplicate only
+  const duplicateEvent = (event: HosEvent) => {
     if (isLockedEvent(event)) {
       toastLocked();
       return;
     }
-    const newEvent: HosEvent | HosEventPayload = {
+    const newEvent: HosEvent = {
       ...event,
       _id: generateHosEventId(),
     };
 
-    setEvents((prev) =>
-      [...prev, newEvent].sort(
-        (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
-      ),
-    );
+    setEvents([...events, newEvent]);
 
-    setStatus("pending");
     return newEvent;
   };
 
-  const deleteEvent = (eventId: string) => {
-    const target = events.find((e) => e._id === eventId);
+  const deleteEvents = (eventIds: string | Set<string>) => {
+    const ids = eventIds instanceof Set ? eventIds : new Set([eventIds]);
 
-    if (isLockedEvent(target)) {
+    const locked = events.find((e) => ids.has(e._id) && isLockedEvent(e));
+
+    if (locked) {
       toastLocked();
       return;
     }
 
-    setEvents((prev) => prev.filter((e) => e._id !== eventId));
-    setStatus("pending");
+    setEvents(events.filter((e) => !ids.has(e._id)));
   };
 
-  const updateEvent = (
-    id: string,
-    updater: (event: HosEventPayload) => HosEventPayload,
-  ) => {
+  const updateEvent = (id: string, updater: (event: HosEvent) => HosEvent) => {
     const target = events.find((e) => e._id === id);
 
-    if (isLockedEvent(target)) {
+    if (target && isServerLockedEvent(target)) {
       toastLocked();
       return;
     }
 
-    setEvents((prev) =>
-      sortEvents(
-        prev.map((event) => (event._id === id ? updater(event) : event)),
-      ),
+    setEvents(
+      events.map((event) => (event._id === id ? updater(event) : event)),
     );
-
-    setStatus("pending");
   };
 
   const updateEventsTimestamp = ({
@@ -193,38 +215,53 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     selectedIds: Set<string>;
     deltaMs: number;
   }) => {
-    const lockedSelected = events.some((e) => selectedIds.has(e._id) && e.i);
-
-    if (lockedSelected) {
+    const selectedEvents = events.filter((e) => selectedIds.has(e._id));
+    // future guard
+    if (
+      selectedEvents.some(
+        (event) =>
+          event.eventTime.timestamp + deltaMs > DateTime.now().toMillis(),
+      )
+    ) {
+      toast.error("Cannot move events into the future.");
+      return;
+    }
+    if (isLockedEvent(selectedEvents)) {
       toastLocked();
       return;
     }
 
-    setEvents((prev) =>
-      sortEvents(
-        prev.map((e) => {
-          if (!selectedIds.has(e._id)) return e;
+    const nextEvents = events.map((e) => {
+      if (!selectedIds.has(e._id)) return e;
 
-          const newTimestamp = e.eventTime.timestamp + deltaMs;
-          const newDate =
-            DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
+      const newTimestamp = e.eventTime.timestamp + deltaMs;
+      const newDate = DateTime.fromMillis(newTimestamp).toFormat("yyyy/MM/dd");
 
-          return {
-            ...e,
-            eventTime: {
-              ...e.eventTime,
-              timestamp: newTimestamp,
-              logDate: {
-                ...e.eventTime.logDate,
-                date: newDate,
-              },
-            },
-          };
-        }),
-      ),
-    );
+      return {
+        ...e,
+        eventTime: {
+          ...e.eventTime,
+          timestamp: newTimestamp,
+          logDate: {
+            ...e.eventTime.logDate,
+            date: newDate,
+          },
+        },
+      };
+    });
 
-    setStatus("pending");
+    // cross guard
+    const beforeOrder = sortEvents(events).map((e) => e._id);
+    const afterOrder = sortEvents(nextEvents).map((e) => e._id);
+
+    const crossed = beforeOrder.some((id, index) => afterOrder[index] !== id);
+
+    if (crossed) {
+      toast.error("Cannot move events past other events.");
+      return;
+    }
+
+    setEvents(nextEvents);
   };
 
   // ─── daily log helpers ────────────────────────────────────────────────────
@@ -276,54 +313,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
         },
       };
     });
-
-    setStatus("pending");
   };
 
-  // ─── summary helper ───────────────────────────────────────────────────────
-  const getSummary = (date: string) =>
-    data?.dailySummariesData.find((s) => s.logDate.date === date);
-
-  // ─── transaction controls ─────────────────────────────────────────────────
-  // getSavePayload diffs local events state against the cache (original snapshot)
-  // and returns only what changed — this is what gets sent to the server
-  const getSavePayload = () => {
-    const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
-      "driverData",
-      userId,
-    ]);
-
-    const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
-
-    const originalLogs =
-      cachedData?.pages.flatMap((p) => p.dailyLogsData) ?? [];
-
-    const originalMap = new Map(originalEvents.map((e) => [e._id, e]));
-
-    const currentMap = new Map(events.map((e) => [e._id, e]));
-
-    const changedEvents = events.filter((curr) => {
-      const orig = originalMap.get(curr._id);
-      return JSON.stringify(orig) !== JSON.stringify(curr);
-    });
-
-    const deletedEventIds = originalEvents
-      .filter((e) => !currentMap.has(e._id))
-      .map((e) => e._id);
-
-    const changedLogs = Object.entries(dailyLogEdits).map(([id, edits]) => {
-      const base = originalLogs.find((l) => l._id === id);
-      return { ...base, ...edits };
-    });
-
-    return {
-      changedEvents,
-      deletedEventIds,
-      changedLogs,
-    };
-  };
-  const savePayload = getSavePayload();
-  console.log({ savePayload });
   const commit = async (
     onProgress?: (p: CommitProgress) => void,
   ): Promise<CommitResult> => {
@@ -381,7 +372,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     await runQueue({
       items,
-      concurrency: 2,
+      batchSize: 2,
+      launchEveryMs: 100,
       onProgress: (p) => {
         onProgress?.({
           done: p.done,
@@ -389,7 +381,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
           success: p.success,
           failed: p.failed,
           current: p.current,
-          retrying: p.retrying,
+          waiting: p.waiting,
         });
       },
     });
@@ -398,19 +390,100 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       queryKey: ["driverData", userId],
     });
 
-    const freshData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
-      "driverData",
-      userId,
-    ]);
+    const rawFreshData = queryClient.getQueryData<
+      InfiniteData<DailyLogsPage, Range>
+    >(["driverData", userId]);
 
-    setEvents(sortEvents(freshData?.pages.flatMap((p) => p.eventsData) ?? []));
+    const freshData = flattenDailyLogsData(rawFreshData);
+
+    setEvents(freshData.eventsData);
     setDailyLogEdits({});
-    setStatus("idle");
-
     return {
       failed: [],
     };
   };
+
+  // diffs state with cache, because of json string comparison and me not ordering
+  // events properly yet, this will have some false changes that are basically the
+  // same events/logs
+  const getSavePayload = useCallback(() => {
+    // const diffKeys = (a: any, b: any) => {
+    //   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+
+    //   return [...keys].filter(
+    //     (key) => JSON.stringify(a?.[key]) !== JSON.stringify(b?.[key]),
+    //   );
+    // };
+    const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
+      "driverData",
+      userId,
+    ]);
+
+    const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
+
+    const originalLogs =
+      cachedData?.pages.flatMap((p) => p.dailyLogsData) ?? [];
+
+    const originalMap = new Map(originalEvents.map((e) => [e._id, e]));
+
+    const currentMap = new Map(events.map((e) => [e._id, e]));
+
+    const changedEvents = events.filter((curr) => {
+      const orig = originalMap.get(curr._id);
+
+      const changed = JSON.stringify(orig) !== JSON.stringify(curr);
+
+      // if (changed) {
+      //   for (const key of diffKeys(orig, curr)) {
+      //     console.log(key, {
+      //       original: orig?.[key],
+      //       current: curr?.[key],
+      //     });
+      //   }
+      //   console.log("original order", Object.keys(orig ?? {}));
+      //   console.log("current order", Object.keys(curr));
+      // }
+
+      return changed;
+    });
+
+    const deletedEventIds = originalEvents
+      .filter((e) => !currentMap.has(e._id))
+      .map((e) => e._id);
+
+    // const changedLogs = Object.entries(dailyLogEdits).map(([id, edits]) => {
+    //   const base = originalLogs.find((l) => l._id === id);
+    //   return { ...base, ...edits };
+    // });
+    const changedLogs = Object.entries(dailyLogEdits)
+      .map(([id, editedLog]) => {
+        if (!driver || !company) return null;
+
+        const base =
+          originalLogs.find((log) => log._id === id) ??
+          buildDailyLog({
+            dailyLogId: id,
+            driver,
+            selectedDay,
+            company,
+          });
+
+        const changed = JSON.stringify(base) !== JSON.stringify(editedLog);
+
+        return changed ? editedLog : null;
+      })
+      .filter((log): log is DailyLog => log != null);
+
+    return {
+      changedEvents,
+      deletedEventIds,
+      changedLogs,
+    };
+  }, [queryClient, userId, events, dailyLogEdits]);
+
+  // temp log
+  const savePayload = getSavePayload();
+  console.log({ savePayload });
 
   const getSaveStats = () => {
     const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
@@ -424,19 +497,13 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     };
   };
 
-  // reset restores events from cache and clears all log edits
   const reset = () => {
-    setStatus("idle");
     const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
       "driverData",
       userId,
     ]);
     const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
-    setEvents(
-      [...originalEvents].sort(
-        (a, b) => a.eventTime.timestamp - b.eventTime.timestamp,
-      ),
-    );
+    setEvents(originalEvents);
     setDailyLogEdits({});
   };
 
@@ -486,7 +553,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       ...base
     } = anchorEvent;
 
-    const certEvent: HosEventPayload = {
+    const certEvent: HosEvent = {
       ...base,
 
       _id: generateHosEventId(),
@@ -509,13 +576,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       },
     };
 
-    setEvents((prev) => sortEvents([...prev, certEvent]));
+    setEvents([...events, certEvent]);
 
     updateDailyLog(dailyLog._id, {
       signature,
     });
-
-    setStatus("pending");
   };
 
   const fixInt = async (selectedId: string) => {
@@ -645,22 +710,18 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       buildBasicEventType(iE, "LOG_NORMAL_PRECISION", generateHosEventId()),
     );
 
-    setEvents((prev) =>
-      sortEvents([
-        ...prev.filter(
-          (event) =>
-            !(
-              event._id !== selected._id &&
-              event._id !== endEvent._id &&
-              event.eventTime.timestamp > selected.eventTime.timestamp &&
-              event.eventTime.timestamp < endEvent.eventTime.timestamp
-            ),
-        ),
-        ...newEvents,
-      ]),
-    );
-
-    setStatus("pending");
+    setEvents((prev) => [
+      ...prev.filter(
+        (event) =>
+          !(
+            event._id !== selected._id &&
+            event._id !== endEvent._id &&
+            event.eventTime.timestamp > selected.eventTime.timestamp &&
+            event.eventTime.timestamp < endEvent.eventTime.timestamp
+          ),
+      ),
+      ...newEvents,
+    ]);
   };
 
   const dailyLogs = [
@@ -670,25 +731,23 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
   return {
     status,
-    // per-day selectors
+
     getDailyLog,
     getSummary,
     getSaveStats,
 
-    // mutable events array — use this everywhere instead of raw cache
     events,
-    lastKnownEvent,
-    createEvent,
+    lastKnownEvent: data?.lastKnownEvent,
+    duplicateEvent,
     updateEvent,
-    deleteEvent,
+    deleteEvents,
     updateEventsTimestamp,
     setDailyLogEdits,
 
-    // all summaries if you need to iterate (e.g. calendar view)
     summaries: data?.dailySummariesData ?? [],
     dailyLogs,
 
-    // fetch controls
+    // fetch control
     fetchPreviousRange,
     hasMore,
     isFetchingMore,

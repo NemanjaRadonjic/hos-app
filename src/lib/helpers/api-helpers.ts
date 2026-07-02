@@ -1,14 +1,8 @@
 import type { CommitProgress } from "../hooks/useTransaction";
+import { health } from "./health-check";
 
 export const sleep = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-export const getRetryDelayMs = (attempt: number) => {
-  if (attempt === 1) return 1_000;
-  if (attempt === 2) return 15_000;
-  if (attempt === 3) return 30_000;
-  return 60_000;
-};
 
 export type QueueItem = {
   id: string;
@@ -16,64 +10,33 @@ export type QueueItem = {
   run: () => Promise<void>;
 };
 
-export async function runWithInfiniteRetry(
-  item: QueueItem,
-  onRetry?: (retry: {
-    id: string;
-    label: string;
-    attempt: number;
-    delayMs: number;
-  }) => void,
-) {
-  let attempt = 0;
-
-  while (true) {
-    try {
-      await item.run();
-      return;
-    } catch (error) {
-      attempt++;
-
-      const delayMs = getRetryDelayMs(attempt);
-
-      onRetry?.({
-        id: item.id,
-        label: item.label,
-        attempt,
-        delayMs,
-      });
-
-      await sleep(delayMs);
-    }
-  }
-}
-
 type QueueProgress = {
   done: number;
   total: number;
   success: number;
   failed: number;
   current?: string;
-  retrying?: CommitProgress["retrying"];
+  waiting: CommitProgress["waiting"];
 };
 
 export async function runQueue({
   items,
-  concurrency = 6,
+  batchSize = 2,
   launchEveryMs = 100,
   onProgress,
 }: {
   items: QueueItem[];
-  concurrency?: number;
+  batchSize?: number;
   launchEveryMs?: number;
   onProgress?: (p: QueueProgress) => void;
 }) {
+  let index = 0;
   let done = 0;
   let success = 0;
   let failed = 0;
-  let index = 0;
   let active = 0;
-  let retrying: QueueProgress["retrying"] = null;
+  let paused = false;
+  let waiting: QueueProgress["waiting"] = null;
 
   const total = items.length;
 
@@ -84,53 +47,92 @@ export async function runQueue({
       success,
       failed,
       current,
-      retrying,
+      waiting,
     });
+  };
+
+  let pausePromise: Promise<void> | null = null;
+
+  const pauseUntilHealthy = (current?: string) => {
+    if (!pausePromise) {
+      paused = true;
+
+      waiting = {
+        reason: "server",
+        label: "Server is not responding. Waiting for server...",
+      };
+
+      report(current);
+
+      pausePromise = health.waitUntilHealthy(5_000).then(() => {
+        waiting = null;
+        paused = false;
+        pausePromise = null;
+        report(current);
+      });
+    }
+
+    return pausePromise;
   };
 
   report();
 
+  const initialOk = await health.check();
+
+  if (!initialOk) {
+    await pauseUntilHealthy("Waiting for server...");
+  }
+
   return await new Promise<{ failed: string[] }>((resolve) => {
-    const launchNext = () => {
-      while (active < concurrency && index < items.length) {
-        const item = items[index++];
-        active++;
-
-        runWithInfiniteRetry(item, (retry) => {
-          retrying = retry;
-          report(item.label);
-        }).then(() => {
-          active--;
-
-          if (retrying?.id === item.id) {
-            retrying = null;
-          }
-
-          done++;
-          success++;
-          report(item.label);
-
-          if (done === total) {
-            resolve({ failed: [] });
-          }
-        });
-
-        break;
-      }
-
-      if (index >= items.length && active === 0) {
+    const maybeResolve = () => {
+      if (index >= items.length && active === 0 && !paused) {
         resolve({ failed: [] });
       }
     };
 
-    launchNext();
+    const runItem = async (item: QueueItem) => {
+      active++;
+
+      try {
+        while (true) {
+          try {
+            await item.run();
+            break;
+          } catch {
+            await pauseUntilHealthy(item.label);
+          }
+        }
+
+        done++;
+        success++;
+        report(item.label);
+      } finally {
+        active--;
+        maybeResolve();
+      }
+    };
+
+    const launchBatch = () => {
+      if (paused) return;
+
+      for (let i = 0; i < batchSize && index < items.length; i++) {
+        const item = items[index++];
+        void runItem(item);
+      }
+
+      maybeResolve();
+    };
+
+    launchBatch();
 
     const interval = window.setInterval(() => {
-      launchNext();
-
       if (index >= items.length) {
         window.clearInterval(interval);
+        maybeResolve();
+        return;
       }
+
+      launchBatch();
     }, launchEveryMs);
   });
 }

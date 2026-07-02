@@ -5,21 +5,129 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
   --color-error: var(--error);
+  --color-error-fg: var(--error-fg);
+  --color-error-bg: var(--error-bg);
+
   --color-success: var(--success);
+  --color-success-fg: var(--success-fg);
+  --color-success-bg: var(--success-bg);
+
   --color-warning: var(--warning);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-bg: var(--warning-bg);
+
   --color-cycle: var(--cycle);
   --color-recap: var(--recap);
   --color-break: var(--break);
-  --color-hos-DS_OFF: var(--hos-DS_OFF);
-  --color-hos-DS_ON: var(--hos-DS_ON);
-  --color-hos-DS_D: var(--hos-DS_D);
-  --color-hos-DS_SB: var(--hos-DS_SB);
-  --color-hos-DR_IND_PC: var(--hos-DR_IND_PC);
-}
 
-@theme inline {
+  --color-hos-DS_OFF-bg: var(--hos-DS_OFF-bg);
+  --color-hos-DS_OFF-fg: var(--hos-DS_OFF-fg);
+
+  --color-hos-DS_ON-bg: var(--hos-DS_ON-bg);
+  --color-hos-DS_ON-fg: var(--hos-DS_ON-fg);
+
+  --color-hos-DS_D-bg: var(--hos-DS_D-bg);
+  --color-hos-DS_D-fg: var(--hos-DS_D-fg);
+
+  --color-hos-DS_SB-bg: var(--hos-DS_SB-bg);
+  --color-hos-DS_SB-fg: var(--hos-DS_SB-fg);
+
+  --color-hos-DS_WT-bg: var(--hos-DS_WT-bg);
+  --color-hos-DS_WT-fg: var(--hos-DS_WT-fg);
+
+  --color-hos-DR_IND_PC-bg: var(--hos-DR_IND_PC-bg);
+  --color-hos-DR_IND_PC-fg: var(--hos-DR_IND_PC-fg);
+
+  --color-hos-DR_IND_YM-bg: var(--hos-DR_IND_YM-bg);
+  --color-hos-DR_IND_YM-fg: var(--hos-DR_IND_YM-fg);
+
+  --color-hos-DR_LOGIN-bg: var(--hos-DR_LOGIN-bg);
+  --color-hos-DR_LOGIN-fg: var(--hos-DR_LOGIN-fg);
+
+  --color-hos-DR_LOGOUT-bg: var(--hos-DR_LOGOUT-bg);
+  --color-hos-DR_LOGOUT-fg: var(--hos-DR_LOGOUT-fg);
+
+  --color-hos-MALF_LOGGED-bg: var(--hos-MALF_LOGGED-bg);
+  --color-hos-MALF_LOGGED-fg: var(--hos-MALF_LOGGED-fg);
+
+  --color-hos-MALF_CLEARED-bg: var(--hos-MALF_CLEARED-bg);
+  --color-hos-MALF_CLEARED-fg: var(--hos-MALF_CLEARED-fg);
+
+  --color-hos-DIAG_LOGGED-bg: var(--hos-DIAG_LOGGED-bg);
+  --color-hos-DIAG_LOGGED-fg: var(--hos-DIAG_LOGGED-fg);
+
+  --color-hos-DIAG_CLEARED-bg: var(--hos-DIAG_CLEARED-bg);
+  --color-hos-DIAG_CLEARED-fg: var(--hos-DIAG_CLEARED-fg);
+
+  --color-hos-LOG_NORMAL_PRECISION-bg: var(--hos-LOG_NORMAL_PRECISION-bg);
+  --color-hos-LOG_NORMAL_PRECISION-fg: var(--hos-LOG_NORMAL_PRECISION-fg);
+
+  --color-hos-LOG_REDUCED_PRECISION-bg: var(--hos-LOG_REDUCED_PRECISION-bg);
+  --color-hos-LOG_REDUCED_PRECISION-fg: var(--hos-LOG_REDUCED_PRECISION-fg);
+
+  --color-hos-ENG_UP_NORMAL-bg: var(--hos-ENG_UP_NORMAL-bg);
+  --color-hos-ENG_UP_NORMAL-fg: var(--hos-ENG_UP_NORMAL-fg);
+
+  --color-hos-ENG_UP_REDUCED-bg: var(--hos-ENG_UP_REDUCED-bg);
+  --color-hos-ENG_UP_REDUCED-fg: var(--hos-ENG_UP_REDUCED-fg);
+
+  --color-hos-ENG_DOWN_NORMAL-bg: var(--hos-ENG_DOWN_NORMAL-bg);
+  --color-hos-ENG_DOWN_NORMAL-fg: var(--hos-ENG_DOWN_NORMAL-fg);
+
+  --color-hos-ENG_DOWN_REDUCED-bg: var(--hos-ENG_DOWN_REDUCED-bg);
+  --color-hos-ENG_DOWN_REDUCED-fg: var(--hos-ENG_DOWN_REDUCED-fg);
+
+  --color-hos-DR_CERT-bg: var(--hos-DR_CERT-bg);
+  --color-hos-DR_CERT-fg: var(--hos-DR_CERT-fg);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -75,7 +183,7 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(70.7% 0.165 254.624);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -87,10 +195,15 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
 
+  --error-fg: oklch(44.4% 0.177 26.899);
+  --error-bg: oklch(97.1% 0.013 17.38);
+  --success-fg: oklch(0.5 0.18 145);
+  --success-bg: oklch(0.95 0.02 145);
+  --warning-fg: oklch(0.22 0.03 100);
+  --warning-bg: oklch(0.84 0.17 100);
   /* =========================
    DUTY STATUSES (PRIMARY)
    ========================= */
-
   --hos-DS_OFF-bg: oklch(0.52 0.22 25);
   --hos-DS_OFF-fg: oklch(0.95 0.02 25);
 

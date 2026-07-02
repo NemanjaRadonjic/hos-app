@@ -46,12 +46,6 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
       ...(signature && { signature }),
       ...(pendingCoDriver && { coDriver: pendingCoDriver }),
     });
-    console.log({
-      trailers,
-      shippingDocuments: shippingDocs,
-      ...(signature && { signature }),
-      ...(pendingCoDriver && { coDriver: pendingCoDriver }),
-    });
     closeDialog();
   };
   return (
@@ -98,6 +92,7 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
 
         <div className="relative">
           <Input
+            onKeyDown={(e) => e.stopPropagation()}
             value={signature ?? ""}
             onChange={(e) => setSignature(e.target.value)}
             className="pr-10"
