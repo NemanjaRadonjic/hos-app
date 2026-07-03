@@ -1,9 +1,19 @@
 import type { HosEvent } from "@/lib/types";
-import type { Draft, EventFamily } from "../helpers/types";
+import type { Draft } from "../helpers/types";
 import { getEventFamily } from "./helpers/get-event-family";
 import { DateTime } from "luxon";
 
-export const buildDraft = (event: HosEvent, eventCode: string): Draft => {
+type BuildDraftProps = {
+  event: HosEvent;
+  eventCode: string;
+  draft: Draft | null;
+};
+
+export const buildDraft = ({
+  event,
+  eventCode,
+  draft,
+}: BuildDraftProps): Draft => {
   const family = getEventFamily(eventCode);
   const defaultCertifiedRecordLogDate = {
     date: DateTime.fromFormat(event.eventTime.logDate.date, "yyyy/MM/dd")
@@ -31,7 +41,7 @@ export const buildDraft = (event: HosEvent, eventCode: string): Draft => {
     family,
     event: {
       seqId: String(parseInt(event.seqId, 16)),
-      eventTime: event.eventTime,
+      eventTime: draft?.event.eventTime ?? event.eventTime,
       eventCode,
       certifiedRecordLogDate:
         event.certifiedRecordLogDate ?? defaultCertifiedRecordLogDate,

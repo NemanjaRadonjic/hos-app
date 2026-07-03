@@ -155,7 +155,11 @@ export function EditEventModal({
       return;
     }
 
-    const nextDraft = buildDraft(event, event.eventCode.id);
+    const nextDraft = buildDraft({
+      event,
+      eventCode: event.eventCode.id,
+      draft,
+    });
 
     setFormState({
       lat: event.location?.lat != null ? String(event.location.lat) : "",
@@ -291,7 +295,11 @@ export function EditEventModal({
               setDraft((prev) => {
                 if (!prev || !event) return prev;
 
-                const nextDraft = buildDraft(event, value);
+                const nextDraft = buildDraft({
+                  event,
+                  eventCode: value,
+                  draft,
+                });
 
                 setErrors(validateDraft(nextDraft));
                 return nextDraft;

@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { ICON_SIZES, NOTES_MAP } from "./maps";
 import { TiDownload, TiUpload } from "react-icons/ti";
-import { BsFuelPumpFill } from "react-icons/bs";
+import { BsFillClipboard2CheckFill, BsFuelPumpFill } from "react-icons/bs";
 import type { IconType } from "react-icons";
 
 export const minutesToHours = (minutes: number): string => {
@@ -20,39 +20,124 @@ export const timestampToMinutes = (ts: number): number => {
 };
 
 type NoteIcon = { Icon: IconType; color: string; size?: number };
-type NoteTypeResult = { icons: NoteIcon[] } | null;
+// type NoteTypeResult = { icons: NoteIcon[] } | null;
+
+// export function getNoteIcons(
+//   comment: string | undefined | null,
+// ): NoteTypeResult {
+//   if (!comment) return null;
+//   const text = comment.toLowerCase();
+//   // special case for 'load' because it would match both
+//   const isLoad = /\b(load|loading|loaded)\b/.test(text);
+//   const isUnload = /\b(unload|unloading|unloaded)\b/.test(text);
+//   const isDel =
+//     NOTES_MAP.del.some((keyword) => text.includes(keyword)) || isUnload;
+
+//   const isPu = NOTES_MAP.pu.some((keyword) => text.includes(keyword)) || isLoad;
+//   const isFuel = NOTES_MAP.fuel.some((keyword) => text.includes(keyword));
+
+//   const isPti = NOTES_MAP.pti.some((keyword) => text.includes(keyword));
+
+//   if (isDel && isPu)
+//     return {
+//       icons: [
+//         { Icon: TiDownload, color: "red", size: ICON_SIZES.default },
+//         { Icon: TiUpload, color: "green", size: ICON_SIZES.default },
+//       ],
+//     };
+//   if (isDel)
+//     return {
+//       icons: [{ Icon: TiDownload, color: "red", size: ICON_SIZES.default }],
+//     };
+//   if (isPu)
+//     return {
+//       icons: [{ Icon: TiUpload, color: "green", size: ICON_SIZES.default }],
+//     };
+//   if (isFuel)
+//     return {
+//       icons: [{ Icon: BsFuelPumpFill, color: "blue", size: ICON_SIZES.fuel }],
+//     };
+//   if (isPti) {
+//     return {
+//       icons: [
+//         {
+//           Icon: BsFillClipboard2CheckFill,
+//           color: "blue",
+//           size: ICON_SIZES.fuel,
+//         },
+//       ],
+//     };
+//   }
+
+//   return null;
+// }
+
+type NoteIconResult = {
+  inlineIcons: NoteIcon[];
+  noteIcons: NoteIcon[];
+};
 
 export function getNoteIcons(
   comment: string | undefined | null,
-): NoteTypeResult {
-  if (!comment) return null;
+): NoteIconResult {
+  if (!comment) {
+    return {
+      inlineIcons: [],
+      noteIcons: [],
+    };
+  }
+
   const text = comment.toLowerCase();
+
+  const inlineIcons: NoteIcon[] = [];
+  const noteIcons: NoteIcon[] = [];
+
+  const isPti =
+    text.includes("pti") ||
+    text.includes("pre trip") ||
+    text.includes("pre-trip") ||
+    text.includes("pretrip");
 
   const isDel = NOTES_MAP.del.some((keyword) => text.includes(keyword));
   const isPu = NOTES_MAP.pu.some((keyword) => text.includes(keyword));
   const isFuel = NOTES_MAP.fuel.some((keyword) => text.includes(keyword));
 
-  if (isDel && isPu)
-    return {
-      icons: [
-        { Icon: TiDownload, color: "red", size: ICON_SIZES.default },
-        { Icon: TiUpload, color: "green", size: ICON_SIZES.default },
-      ],
-    };
-  if (isDel)
-    return {
-      icons: [{ Icon: TiDownload, color: "red", size: ICON_SIZES.default }],
-    };
-  if (isPu)
-    return {
-      icons: [{ Icon: TiUpload, color: "green", size: ICON_SIZES.default }],
-    };
-  if (isFuel)
-    return {
-      icons: [{ Icon: BsFuelPumpFill, color: "blue", size: ICON_SIZES.fuel }],
-    };
+  if (isPti) {
+    inlineIcons.push({
+      Icon: BsFillClipboard2CheckFill,
+      color: "blue",
+      size: ICON_SIZES.pti,
+    });
+  }
 
-  return null;
+  if (isDel) {
+    noteIcons.push({
+      Icon: TiDownload,
+      color: "red",
+      size: ICON_SIZES.default,
+    });
+  }
+
+  if (isPu) {
+    noteIcons.push({
+      Icon: TiUpload,
+      color: "green",
+      size: ICON_SIZES.default,
+    });
+  }
+
+  if (isFuel) {
+    noteIcons.push({
+      Icon: BsFuelPumpFill,
+      color: "blue",
+      size: ICON_SIZES.fuel,
+    });
+  }
+
+  return {
+    inlineIcons,
+    noteIcons,
+  };
 }
 
 export const msToHHMMSS = (ms: number) => {

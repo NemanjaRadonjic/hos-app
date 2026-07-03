@@ -1,15 +1,14 @@
-import { minutesToHours, msToHHMMSS } from "@/lib/helpers";
+import { msToHHMMSS } from "@/lib/helpers";
 import type { EventCode, GraphSizes, RowPositions } from "./types";
 import { GRAPH_STATUS_COLORS, GRAPH_STATUS_LABELS } from "./constants";
 import type { HosEvent } from "@/lib/types";
 import type { DateTime } from "luxon";
 import { buildSegments } from "@/lib/hos/segments";
-import { msToHoursMinutes } from "@/lib/hos/helpers";
 
 type DrawLabelsProps = {
   ctx: CanvasRenderingContext2D;
   events: HosEvent[];
-  selectedDay: DateTime<true>;
+  selectedDay: DateTime<true> | DateTime<false>;
   ROW_POSITIONS: RowPositions;
   GRAPH_SIZES: GraphSizes;
 };

@@ -104,11 +104,13 @@ export const TZ_MAP: Record<string, string> = {
 export const ICON_SIZES = {
   default: 20,
   fuel: 14,
+  pti: 16,
 };
 
 export const NOTES_MAP = {
+  pti: ["pti", "pretrip", "pre-trip inspection"],
   fuel: ["fuel"],
-  del: ["del", "reciever", "drop"],
+  del: ["del", "receiver", "drop"],
   pu: ["pu", "pick", "hook"],
 };
 

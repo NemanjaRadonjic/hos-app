@@ -113,7 +113,7 @@ export default function drawLineGraph({
       event.nextMiles != null &&
       event.miles != null
     ) {
-      const mph = Math.round((event.nextMiles - event.miles) / (duration / 60));
+      const mph = Math.floor((event.nextMiles - event.miles) / (duration / 60));
 
       const points = [
         mainEvents[i],

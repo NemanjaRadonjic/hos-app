@@ -71,10 +71,7 @@ export default function ControlBar({
     ? events.find((event) => event._id === selectedId)
     : undefined;
 
-  const canFixInt =
-    count === 1 &&
-    selectedEvent?.eventCode.id === "DS_D" &&
-    !diagnostics.issues.some((issue) => issue.eventId === selectedEvent._id);
+  const canFixInt = count === 1 && selectedEvent?.eventCode.id === "DS_D";
 
   const hasSelection = count > 0;
 

@@ -1,7 +1,7 @@
 import { Checkbox } from "../ui/checkbox";
 import { TableCell, TableRow } from "../ui/table";
 import { DateTime, Duration } from "luxon";
-import { ORIGIN_MAP, TZ_MAP } from "@/lib/maps";
+import { ICON_SIZES, ORIGIN_MAP, TZ_MAP } from "@/lib/maps";
 import { Badge } from "../ui/badge";
 import type { HosEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -99,6 +99,10 @@ const LogEvent = ({
   };
 
   const icons = getNoteIcons(event.eventComment);
+  const badgeIcons = [
+    ...(icons?.inlineIcons ?? []),
+    ...(icons?.noteIcons ?? []),
+  ];
 
   const groupedIssues = eventInfo.issues.reduce(
     (acc, issue) => {
@@ -283,7 +287,7 @@ const LogEvent = ({
             <div
               className={cn(
                 "text-success-fg font-bold",
-                engineHoursIssueSeverity === "error" && "text-error-bg",
+                engineHoursIssueSeverity === "error" && "text-error-fg",
                 engineHoursIssueSeverity === "warning" && "text-warning-bg",
               )}
             >
@@ -296,8 +300,12 @@ const LogEvent = ({
       <TableCell className="text-muted-foreground text-xs">
         {event.eventComment && (
           <Badge variant="outline" className="[&>svg]:size-auto">
-            {icons?.icons.map(({ Icon, color, size }, i) => (
-              <Icon key={i} color={color} size={size - 4} />
+            {badgeIcons.map(({ Icon, color, size }, i) => (
+              <Icon
+                key={i}
+                color={color}
+                size={(size ?? ICON_SIZES.default) - 4}
+              />
             ))}
             {event.eventComment}
           </Badge>

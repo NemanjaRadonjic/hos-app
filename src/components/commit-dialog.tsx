@@ -13,6 +13,8 @@ import { Spinner } from "./ui/spinner";
 import { useHealth } from "@/lib/helpers/health-check";
 import { LogCheckList } from "./log-check-list";
 import { DateTime } from "luxon";
+import { BsCheckCircleFill } from "react-icons/bs";
+import { BiSolidError } from "react-icons/bi";
 
 type CommitPhase = "confirm" | "saving" | "success" | "error";
 
@@ -89,9 +91,9 @@ export function CommitDialog({
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                   {issues.length > 0 ? (
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <BiSolidError className="text-error-fg h-4 w-4" />
                   ) : (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <BsCheckCircleFill className="text-success h-4 w-4" />
                   )}
                   Log diagnostics
                 </div>

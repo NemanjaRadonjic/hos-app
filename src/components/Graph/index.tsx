@@ -1,11 +1,15 @@
 import { getNoteIcons, timestampToMinutes } from "@/lib/helpers";
 import { DateTime } from "luxon";
-import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { ICON_SIZES, mainEventCodes } from "@/lib/maps";
 import { BiSolidCertification, BiLogIn, BiLogOut } from "react-icons/bi";
 import { TbEngine, TbEngineOff } from "react-icons/tb";
-import { TiUpload, TiDownload } from "react-icons/ti";
-import { BsFuelPumpFill } from "react-icons/bs";
 import { cn } from "@/lib/utils";
 import drawGrid from "./draw-grid";
 import drawLabels from "./draw-labels";
@@ -16,7 +20,6 @@ import type { DutyEvent, EventCode } from "./types";
 import { isActiveEvent, isDutyEvent } from "@/lib/hos/helpers";
 import type { Violation } from "@/lib/hos/calculations";
 import drawViolationOverlay from "./drawViolationOverlay";
-import type { EnrichedEvent } from "@/routes/drivers/helpers/enrich-events";
 import { useSelectionStore } from "@/lib/store/useSelectionStore";
 import { isInterlocationEvent } from "@/lib/log-check/helpers/status-type-checks";
 
@@ -29,19 +32,37 @@ type ELDGraphProps = {
 };
 
 const ICON_COLORS: Record<string, string> = {
-  ENG_UP_NORMAL: "#0a720a",
-  ENG_DOWN_NORMAL: "#be1818",
-  DR_CERT_1: "#1b18be",
   DR_LOGIN: "#0a720a",
   DR_LOGOUT: "#be1818",
 };
 
 const ICON_MAP: Record<string, IconType> = {
-  ENG_UP_NORMAL: TbEngine,
-  ENG_DOWN_NORMAL: TbEngineOff,
-  DR_CERT_1: BiSolidCertification,
   DR_LOGIN: BiLogIn,
   DR_LOGOUT: BiLogOut,
+};
+
+const getIcon = (eventCode: string): IconType | null => {
+  if (eventCode.startsWith("DR_CERT")) return BiSolidCertification;
+  if (eventCode.startsWith("ENG_UP")) return TbEngine;
+  if (eventCode.startsWith("ENG_DOWN")) return TbEngineOff;
+
+  return ICON_MAP[eventCode] ?? null;
+};
+
+const getIconColor = (eventCode: string) => {
+  if (eventCode.startsWith("DR_CERT")) {
+    return eventCode === "DR_CERT_1" ? "#1b18be" : "#808080";
+  }
+
+  if (eventCode.startsWith("ENG_UP")) {
+    return eventCode === "ENG_UP_NORMAL" ? "#0a720a" : "#808080";
+  }
+
+  if (eventCode.startsWith("ENG_DOWN")) {
+    return eventCode === "ENG_DOWN_NORMAL" ? "#be1818" : "#808080";
+  }
+
+  return ICON_COLORS[eventCode];
 };
 
 const GRAPH_SIZES = (() => {
@@ -362,11 +383,11 @@ export default function ELDGraph({
         ctx.setLineDash([]);
 
         ctx.beginPath();
-        ctx.moveTo(x, ROW_POSITIONS["DS_D"] - 10);
-        ctx.lineTo(x, ROW_POSITIONS["DS_D"] + 10);
+        ctx.moveTo(x, ROW_POSITIONS["DS_D"] - 8);
+        ctx.lineTo(x, ROW_POSITIONS["DS_D"] + 8);
         ctx.stroke();
       } else {
-        const color = ICON_COLORS[event.eventCode.id];
+        const color = getIconColor(event.eventCode.id);
         if (!color) return;
 
         ctx.strokeStyle = color;
@@ -581,8 +602,8 @@ export default function ELDGraph({
           {otherEvents.map((event) => {
             const minutes = timestampToMinutes(event.eventTime.timestamp);
             const x = minutesToX(minutes);
-            const Icon = ICON_MAP[event.eventCode.id];
-            const color = ICON_COLORS[event.eventCode.id];
+            const Icon = getIcon(event.eventCode.id);
+            const color = getIconColor(event.eventCode.id);
             if (!Icon) return null;
 
             return (
@@ -622,33 +643,69 @@ export default function ELDGraph({
             const x = minutesToX(centerMinutes);
 
             return (
-              <div
-                key={event._id}
-                className={cn(
-                  "absolute flex cursor-pointer items-center justify-center rounded-full transition-all duration-200",
-                  note.icons.length > 1 ? "w-6 gap-1" : "w-6",
-                  focusedId === event._id
-                    ? "bg-blue-100 shadow-md ring-2 ring-blue-300"
-                    : "hover:bg-blue-100",
+              <React.Fragment key={event._id}>
+                {note.inlineIcons.length > 0 && (
+                  <div
+                    className={cn(
+                      "absolute flex cursor-pointer items-center justify-center rounded-full transition-all duration-200",
+                      note.inlineIcons.length > 1 ? "w-8" : "w-6",
+                      focusedId === event._id
+                        ? "bg-blue-100 shadow-md ring-2 ring-blue-300"
+                        : "hover:bg-blue-100",
+                    )}
+                    style={{
+                      left: x,
+                      top:
+                        GRAPH_SIZES.canvasHeight -
+                        GRAPH_SIZES.paddingBottom +
+                        4,
+                      height: 24,
+                      transform: `translateX(-50%) scale(${focusedId === event._id ? 1.05 : 1})`,
+                      pointerEvents: "auto",
+                    }}
+                    onClick={(e) => handleIconClick(e, event)}
+                  >
+                    {note.inlineIcons.map(({ Icon, color, size }, i) => (
+                      <Icon
+                        key={i}
+                        color={color}
+                        size={size ?? ICON_SIZES.default}
+                      />
+                    ))}
+                  </div>
                 )}
-                style={{
-                  left: x,
-                  top:
-                    GRAPH_SIZES.canvasHeight - GRAPH_SIZES.paddingBottom + 24,
-                  height: 24,
-                  transform: `translateX(-50%) scale(${focusedId === event._id ? 1.05 : 1})`,
-                  pointerEvents: "auto",
-                }}
-                onClick={(e) => handleIconClick(e, event)}
-              >
-                {note.icons.map(({ Icon, color, size }, i) => (
-                  <Icon
-                    key={i}
-                    color={color}
-                    size={size ?? ICON_SIZES.default}
-                  />
-                ))}
-              </div>
+
+                {note.noteIcons.length > 0 && (
+                  <div
+                    className={cn(
+                      "absolute flex cursor-pointer items-center justify-center rounded-full transition-all duration-200",
+                      note.noteIcons.length > 1 ? "w-8" : "w-6",
+                      focusedId === event._id
+                        ? "bg-blue-100 shadow-md ring-2 ring-blue-300"
+                        : "hover:bg-blue-100",
+                    )}
+                    style={{
+                      left: x,
+                      top:
+                        GRAPH_SIZES.canvasHeight -
+                        GRAPH_SIZES.paddingBottom +
+                        24,
+                      height: 24,
+                      transform: `translateX(-50%) scale(${focusedId === event._id ? 1.05 : 1})`,
+                      pointerEvents: "auto",
+                    }}
+                    onClick={(e) => handleIconClick(e, event)}
+                  >
+                    {note.noteIcons.map(({ Icon, color, size }, i) => (
+                      <Icon
+                        key={i}
+                        color={color}
+                        size={size ?? ICON_SIZES.default}
+                      />
+                    ))}
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
         </div>
