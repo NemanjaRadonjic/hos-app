@@ -6,12 +6,10 @@ import { useState } from "react";
 
 type DatePickerProps = {
   value: DateTime<true> | DateTime<false>;
-  onChange: React.Dispatch<
-    React.SetStateAction<DateTime<true> | DateTime<false>>
-  >;
+  setSelectedDay: React.Dispatch<React.SetStateAction<DateTime<true>>>;
 };
 
-export function DatePicker({ onChange, value }: DatePickerProps) {
+export function DatePicker({ setSelectedDay, value }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const isToday = value.hasSame(DateTime.now(), "day");
   const prev = value.minus({ days: 1 });
@@ -21,7 +19,7 @@ export function DatePicker({ onChange, value }: DatePickerProps) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => onChange(prev)}
+        onClick={() => setSelectedDay(prev)}
         className="text-muted-foreground text-sm"
       >
         {prev.toFormat("MMM d")}
@@ -48,7 +46,7 @@ export function DatePicker({ onChange, value }: DatePickerProps) {
                   day: date.getDate(),
                 }).startOf("day");
 
-                onChange(nextDay);
+                setSelectedDay(nextDay);
                 setOpen(false);
               }
             }}
@@ -70,7 +68,7 @@ export function DatePicker({ onChange, value }: DatePickerProps) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => onChange(next)}
+        onClick={() => setSelectedDay(next)}
         disabled={isToday}
         className="text-muted-foreground text-sm"
       >

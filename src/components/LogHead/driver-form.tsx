@@ -9,10 +9,14 @@ import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { ShippingForm } from "./shipping-form";
 import { useState } from "react";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
-import type { LogIssue } from "@/lib/log-check";
+import type { LogDiagnosticsState, LogIssue } from "@/lib/log-check";
 import { Button } from "../ui/button";
+import type { DateTime } from "luxon";
 
-type DriverFormProps = {};
+type DriverFormProps = {
+  selectedDay: DateTime<true>;
+  diagnostics: LogDiagnosticsState;
+};
 
 export default function DriverForm({
   selectedDay,

@@ -1,4 +1,8 @@
-import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import {
   getHosEvents,
@@ -7,9 +11,10 @@ import {
   getLastKnownStatus,
 } from "../api";
 import type { HosEvent, DailyLog, DailyLogSummary } from "../types";
+import { useCallback, useMemo } from "react";
 
 const INITIAL_HISTORY_DAYS = 24;
-export const CHUNK_DAYS = 10;
+export const CHUNK_DAYS = 8;
 
 export type Range = { from: DateTime; to: DateTime };
 
@@ -58,14 +63,17 @@ export const flattenDailyLogsData = (
 });
 
 export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
-  return useInfiniteQuery<
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => ["driverData", userId] as const, [userId]);
+
+  const query = useInfiniteQuery<
     DailyLogsPage,
     Error,
     FlatDailyLogData,
-    [string, string],
+    typeof queryKey,
     Range
   >({
-    queryKey: ["driverData", userId],
+    queryKey,
 
     initialPageParam: {
       from: DateTime.now().minus({ days: INITIAL_HISTORY_DAYS }).startOf("day"),
@@ -75,26 +83,7 @@ export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
     select: flattenDailyLogsData,
 
     queryFn: async ({ pageParam }) => {
-      const fmt = (d: DateTime) => d.toFormat("yyyy/MM/dd");
-      const isFirstPage = pageParam.to >= DateTime.now().startOf("day");
-
-      const [eventsData, dailyLogsData, dailySummariesData, lastKnownEvent] =
-        await Promise.all([
-          getHosEvents(userId, fmt(pageParam.from), fmt(pageParam.to)),
-          getDailyLogs(userId, fmt(pageParam.from), fmt(pageParam.to)),
-          getDailyLogSummaries(userId, fmt(pageParam.from), fmt(pageParam.to)),
-          isFirstPage
-            ? getLastKnownStatus(userId, fmt(pageParam.from))
-            : Promise.resolve(null),
-        ]);
-
-      return {
-        eventsData: eventsData.length > 0 ? eventsData : [],
-        lastKnownEvent: lastKnownEvent,
-        dailyLogsData,
-        dailySummariesData,
-        range: pageParam,
-      };
+      return fetchDailyLogsPage(userId, pageParam);
     },
 
     getNextPageParam: (lastPage) => {
@@ -107,4 +96,68 @@ export const useDailyLogsData = (userId: string, selectedDay: DateTime) => {
 
     staleTime: Infinity,
   });
+
+  const fetchRange = useCallback(
+    async (range: Range) => {
+      const rawData =
+        queryClient.getQueryData<InfiniteData<DailyLogsPage, Range>>(queryKey);
+
+      const alreadyLoaded = rawData?.pages.some((page) => {
+        return range.from >= page.range.from && range.to <= page.range.to;
+      });
+
+      if (alreadyLoaded) return;
+
+      const page = await fetchDailyLogsPage(userId, range);
+
+      queryClient.setQueryData<InfiniteData<DailyLogsPage, Range>>(
+        queryKey,
+        (old) => {
+          if (!old) {
+            return {
+              pages: [page],
+              pageParams: [range],
+            };
+          }
+
+          return {
+            pages: [...old.pages, page],
+            pageParams: [...old.pageParams, range],
+          };
+        },
+      );
+    },
+    [queryClient, queryKey, userId],
+  );
+
+  return {
+    ...query,
+    fetchRange,
+  };
+};
+
+const fetchDailyLogsPage = async (
+  userId: string,
+  range: Range,
+): Promise<DailyLogsPage> => {
+  const fmt = (d: DateTime) => d.toFormat("yyyy/MM/dd");
+  const isFirstPage = range.to >= DateTime.now().startOf("day");
+
+  const [eventsData, dailyLogsData, dailySummariesData, lastKnownEvent] =
+    await Promise.all([
+      getHosEvents(userId, fmt(range.from), fmt(range.to)),
+      getDailyLogs(userId, fmt(range.from), fmt(range.to)),
+      getDailyLogSummaries(userId, fmt(range.from), fmt(range.to)),
+      isFirstPage
+        ? getLastKnownStatus(userId, fmt(range.from))
+        : Promise.resolve(null),
+    ]);
+
+  return {
+    eventsData,
+    dailyLogsData,
+    dailySummariesData,
+    lastKnownEvent,
+    range,
+  };
 };

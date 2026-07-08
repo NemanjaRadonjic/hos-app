@@ -7,7 +7,6 @@ import { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
-import { X } from "lucide-react";
 import { MdClear } from "react-icons/md";
 
 export const ShippingForm = ({ selectedDay, closeDialog }) => {

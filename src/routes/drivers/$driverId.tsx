@@ -21,7 +21,11 @@ import { hosEngine } from "@/lib/hos/calculations";
 
 import { useDriverData } from "@/lib/hooks/useDriverData";
 import { isDutyEvent } from "@/lib/hos/helpers";
-import { useTransaction } from "@/lib/hooks/useTransaction";
+import {
+  isServerLockedEvent,
+  isUserLockedEvent,
+  useTransaction,
+} from "@/lib/hooks/useTransaction";
 import { TransactionContext } from "@/lib/hooks/TransactionContext";
 import { EditEventModal } from "@/components/LogEvent/EditForm";
 import { buildLogCheck, type LogIssue } from "@/lib/log-check";
@@ -51,7 +55,7 @@ function DriverPage() {
   const { driverId } = Route.useParams();
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState(DateTime.now());
+  const [selectedDay, setSelectedDay] = useState<DateTime>(DateTime.now());
   const [editingEvent, setEditingEvent] = useState<
     HosEvent | HosEventPayload | null
   >(null);
@@ -60,7 +64,6 @@ function DriverPage() {
   const { status, events, lastKnownEvent, updateEventsTimestamp } = transaction;
 
   const { driver } = useDriverData(driverId);
-  console.log({ driver });
 
   const { clocks, violations } = hosEngine(events);
 
@@ -142,8 +145,6 @@ function DriverPage() {
     setSliderSelection,
   } = useSelectionStore((s) => s);
 
-  console.log({ selectedIds });
-
   useEffect(() => {
     setSelectedDay(DateTime.now());
   }, [driverId]);
@@ -205,17 +206,29 @@ function DriverPage() {
     ];
   }, [rawEventList]);
 
-  // handles scrolling into view on focusedId change
   useEffect(() => {
     if (!focusedId) return;
 
     requestAnimationFrame(() => {
       const row = document.getElementById(`row-${focusedId}`);
+      if (!row) return;
 
-      row?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      const container = row.closest(".overflow-auto");
+      if (!container) return;
+
+      const rowRect = row.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+
+      const fullyVisible =
+        rowRect.top >= containerRect.top &&
+        rowRect.bottom <= containerRect.bottom;
+
+      if (!fullyVisible) {
+        row.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
     });
   }, [focusedId]);
 
@@ -246,6 +259,14 @@ function DriverPage() {
     (event) => event.location?.lat != null && event.location?.lon != null,
   );
 
+  const lockedEvents = useMemo(
+    () => ({
+      server: [...events].reverse().find(isServerLockedEvent),
+      user: [...events].reverse().find(isUserLockedEvent),
+    }),
+    [events],
+  );
+
   if (!driver) return <div>Loading</div>;
 
   return (
@@ -253,7 +274,7 @@ function DriverPage() {
       <TransactionContext.Provider value={transaction}>
         <LogHead
           value={selectedDay}
-          onChange={setSelectedDay}
+          setSelectedDay={setSelectedDay}
           hosTimers={clocks}
           selectedDay={selectedDay}
           violations={violations}
@@ -265,6 +286,8 @@ function DriverPage() {
           phone={driver.phone}
           isConnected={driver.isConnected}
           vehicles={vehicles}
+          lockedEvents={lockedEvents}
+          setSelectedDay={setSelectedDay}
         />
         <ELDGraph
           selectedDay={selectedDay}
@@ -282,7 +305,7 @@ function DriverPage() {
             <Table className="w-full table-fixed">
               <TableHeader className="bg-background sticky top-0 z-10 shadow-sm">
                 <TableRow>
-                  <TableHead className="w-10">
+                  <TableHead className="w-8">
                     <Checkbox
                       checked={
                         selectedIds.size > 0 &&
@@ -298,20 +321,20 @@ function DriverPage() {
                       }
                     />
                   </TableHead>
-                  <TableHead className="w-36">Time</TableHead>
+                  <TableHead className="w-34">Time</TableHead>
                   <TableHead className="w-20">Duration</TableHead>
-                  <TableHead className="w-80">Event</TableHead>
+                  <TableHead className="w-52">Event</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead className="w-10"></TableHead>
-                  <TableHead className="w-16 text-center">Status</TableHead>
-                  <TableHead className="w-16 text-center">Origin</TableHead>
+                  <TableHead className="w-18 text-center">Status</TableHead>
+                  <TableHead className="w-18 text-center">Origin</TableHead>
                   <TableHead className="w-30">Odometer</TableHead>
                   <TableHead className="w-30">Eng. Hours</TableHead>
                   <TableHead className="w-52">Note</TableHead>
-                  <TableHead className="w-24 text-center">Actions</TableHead>
-                  <TableHead className="w-16">ELD</TableHead>
-                  <TableHead className="w-16">Vehicle</TableHead>
-                  <TableHead className="w-16">ID</TableHead>
+                  <TableHead className="w-26 text-center">Actions</TableHead>
+                  <TableHead className="w-14">ELD</TableHead>
+                  <TableHead className="w-14">Vehicle</TableHead>
+                  <TableHead className="w-14">ID</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -3,10 +3,11 @@ import { TZ_MAP } from "@/lib/maps";
 import type { HosEvent, VehicleSimplified } from "@/lib/types";
 import { DateTime } from "luxon";
 import { Clock3, Route } from "lucide-react";
-import { FaPhone, FaTruckFront, FaUserClock } from "react-icons/fa6";
+import { FaLock, FaPhone, FaTruckFront, FaUserClock } from "react-icons/fa6";
 import { Badge } from "./ui/badge";
 import { MdSignalWifi4Bar, MdSignalWifiBad } from "react-icons/md";
 import { VerticalSeparator } from "./v-separator";
+import { RiLockFill, RiLockStarFill } from "react-icons/ri";
 
 type InfoBarProps = {
   totalMiles: number;
@@ -14,6 +15,11 @@ type InfoBarProps = {
   phone: string;
   isConnected: boolean;
   vehicles: VehicleSimplified[];
+  lockedEvents: {
+    server: HosEvent | undefined;
+    user: HosEvent | undefined;
+  };
+  setSelectedDay: React.Dispatch<React.SetStateAction<DateTime>>;
 };
 
 export function InfoBar({
@@ -22,6 +28,8 @@ export function InfoBar({
   phone,
   isConnected,
   vehicles,
+  lockedEvents,
+  setSelectedDay,
 }: InfoBarProps) {
   const driverTZ = tzLookup({
     lat: location?.lat,
@@ -32,7 +40,18 @@ export function InfoBar({
     driverTZ;
   const driverTime =
     driverTZ && DateTime.now().setZone(driverTZ).toFormat("hh:mm a");
+  const { server, user } = lockedEvents;
+  const serverLockedAt = server
+    ? DateTime.fromMillis(server.eventTime.timestamp).toFormat(
+        "MM/dd/yyyy hh:mm a",
+      )
+    : null;
 
+  const userLockedAt = user
+    ? DateTime.fromMillis(user.eventTime.timestamp).toFormat(
+        "MM/dd/yyyy hh:mm a",
+      )
+    : null;
   return (
     <div className="bg-muted/40 mb-2 flex items-center justify-between rounded-md border px-6 py-1.5 text-sm">
       <div className="flex items-center gap-4">
@@ -101,6 +120,34 @@ export function InfoBar({
           </Badge>
         )}
       </div>
+      <div className="flex gap-2">
+        {serverLockedAt && server && (
+          <Badge
+            variant="error_filled"
+            className="cursor-pointer"
+            onClick={() =>
+              setSelectedDay(DateTime.fromMillis(server.eventTime.timestamp))
+            }
+          >
+            <RiLockStarFill />
+            {serverLockedAt}
+          </Badge>
+        )}
+
+        {userLockedAt && user && (
+          <Badge
+            variant="error_filled"
+            className="cursor-pointer"
+            onClick={() =>
+              setSelectedDay(DateTime.fromMillis(user.eventTime.timestamp))
+            }
+          >
+            <RiLockFill />
+            {userLockedAt}
+          </Badge>
+        )}
+      </div>
+
       <div className="flex items-center gap-2">
         <Route className="text-muted-foreground h-4 w-4" />
         <span className="text-muted-foreground">Distance</span>

@@ -1,4 +1,4 @@
-import { EVENT_BADGE_COLORS, mainEventCodes, STATUS_MAP } from "@/lib/maps";
+import { EVENT_BADGE_COLORS, mainEventCodes, EVENT_CODE_MAP } from "@/lib/maps";
 import { Badge } from "../ui/badge";
 import { TableCell } from "../ui/table";
 import type { HosEvent } from "@/lib/types";
@@ -18,13 +18,12 @@ import { FaCut } from "react-icons/fa";
 import { BiSolidTrashAlt } from "react-icons/bi";
 
 import StatusBadge from "../ui/status-badge";
+import { isInterlocationEvent } from "@/lib/log-check/helpers/status-type-checks";
 
 type EventAction = "SET_DS_OFF" | "SET_DS_SB" | "SET_DS_ON" | "CUT_EVENT";
 
 const getAvailableActions = (event: HosEvent): EventAction[] => {
   const code = event.eventCode.id;
-
-  const isIntermediate = !mainEventCodes.includes(code);
 
   const setActions: EventAction[] =
     code === "DS_OFF"
@@ -37,7 +36,7 @@ const getAvailableActions = (event: HosEvent): EventAction[] => {
 
   const actions: EventAction[] = [...setActions];
 
-  if (isIntermediate) {
+  if (isInterlocationEvent(event)) {
     actions.push("CUT_EVENT");
   }
 
@@ -63,32 +62,14 @@ const renderAction = (action: EventAction) => {
   }
 };
 
-export default function EventCode({
-  event,
-  setEditingEvent,
-}: {
-  event: HosEvent;
-  setEditingEvent: React.Dispatch<React.SetStateAction<HosEvent | null>>;
-}) {
-  const { deleteEvent, createEvent, updateEvent } = useTransactionContext();
+export default function EventCode({ event }: { event: HosEvent }) {
+  const { updateEvent } = useTransactionContext();
   const code = event.eventCode.id;
   const label = code.includes("CERT")
-    ? `${STATUS_MAP[code]} ${event.certifiedRecordLogDate?.date}`
-    : STATUS_MAP[code];
+    ? `${EVENT_CODE_MAP[code]} ${event.certifiedRecordLogDate?.date}`
+    : EVENT_CODE_MAP[code];
 
   const actions = getAvailableActions(event);
-
-  const duplicateEvent = (event: HosEvent) => {
-    createEvent({
-      ...event,
-      eventTime: {
-        ...event.eventTime,
-        timestamp: event.eventTime.timestamp + 1000,
-        // Incomplete, what if the next ts is next day
-      },
-      eventComment: "",
-    });
-  };
 
   const executeAction = (event: HosEvent, action: EventAction) => {
     switch (action) {
@@ -112,10 +93,10 @@ export default function EventCode({
   };
 
   return (
-    <TableCell className="p-0">
+    <TableCell className="py-0">
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex h-full w-full items-center px-3 py-2">
+          <div className="flex h-full w-full items-center">
             <Badge className={cn(EVENT_BADGE_COLORS[code])}>
               {mainEventCodes.includes(code) && (
                 <span
@@ -129,26 +110,6 @@ export default function EventCode({
         </ContextMenuTrigger>
 
         <ContextMenuContent>
-          <ContextMenuLabel>Main</ContextMenuLabel>
-          <ContextMenuItem
-            onClick={() => {
-              console.time("open-edit-total");
-              console.time("setEditingEvent");
-              setEditingEvent(event);
-              console.timeEnd("setEditingEvent");
-            }}
-          >
-            <MdEditDocument />
-            Edit
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => duplicateEvent(event)}>
-            <HiDocumentDuplicate />
-            Duplicate
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => deleteEvent(event._id)}>
-            <BiSolidTrashAlt />
-            Delete
-          </ContextMenuItem>
           <ContextMenuLabel>Quick edits:</ContextMenuLabel>
           {actions.map((action) => (
             <ContextMenuItem

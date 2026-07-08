@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { useParams } from "@tanstack/react-router";
-import type { HosTimers, Violation } from "@/lib/hos/calculations";
+import type { HosTimers, Violation } from "@/lib/hos/calculations-old";
 
 import CycleList from "./cycles-list";
 
@@ -29,12 +29,11 @@ import { SpaceIcon } from "lucide-react";
 import type { ProviderViolation, Vehicle } from "@/lib/types";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 import { FaTruckFront } from "react-icons/fa6";
+import { getDailyLogSummaries } from "@/lib/api";
 
 interface LogHeadProps {
   value: DateTime<true> | DateTime<false>;
-  onChange: React.Dispatch<
-    React.SetStateAction<DateTime<true> | DateTime<false>>
-  >;
+  setSelectedDay: React.Dispatch<React.SetStateAction<DateTime<true>>>;
   hosTimers: HosTimers;
   selectedDay: DateTime<true>;
   totalMiles: number;
@@ -45,7 +44,7 @@ interface LogHeadProps {
 
 const LogHead = ({
   value,
-  onChange,
+  setSelectedDay,
   hosTimers,
   selectedDay,
   totalMiles,
@@ -57,23 +56,21 @@ const LogHead = ({
     from: "/drivers/$driverId",
   });
   const { driver, isLoading } = useDriverData(driverId);
-  const { drivers } = useDriversData();
-  const { getDailyLog, updateDailyLog, getSummary } = useTransactionContext();
+  const { getDailyLog, summaries } = useTransactionContext();
   const currentDailyLog = getDailyLog(selectedDay.toFormat("yyyy/MM/dd"));
-  const dailyLogSummary = getSummary(selectedDay.toFormat("yyyy/MM/dd"));
   const form = currentDailyLog?.form;
 
   const { driver: coDriver, isCoDriverLoading } = useDriverData(
     form?.coDriver?.id || null,
   );
-  const provider_violations = dailyLogSummary?.violations ?? [];
+  const provider_violations = summaries.flatMap((s) => s.violations);
+
   const totalViolations = violations.length + provider_violations.length;
-  const selectedDaySummary = getSummary(selectedDay.toFormat("yyyy/MM/dd"));
 
   return (
     <section className="flex w-full items-center gap-4 px-6 py-2 shadow-sm">
       <div className="space-y-2">
-        <DatePicker onChange={onChange} value={value} />
+        <DatePicker setSelectedDay={setSelectedDay} value={value} />
       </div>
       <div className="flex flex-col justify-start gap-2">
         {coDriver && <CoDriver coDriverId={coDriver.id} />}
@@ -106,7 +103,14 @@ const LogHead = ({
                 violations.map((v) => (
                   <div
                     key={`${v.rule}-${v.startTs}`}
-                    className="w-fit rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+                    className="w-fit cursor-pointer rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+                    onClick={() => {
+                      setSelectedDay(
+                        DateTime.fromMillis(v.startTs).startOf(
+                          "day",
+                        ) as DateTime<true>,
+                      );
+                    }}
                   >
                     ⚠ {v.rule} violation at{" "}
                     {DateTime.fromMillis(v.startTs).toFormat(
@@ -124,7 +128,14 @@ const LogHead = ({
                 provider_violations.map((v) => (
                   <div
                     key={`${v.regulation.id}-${v.startTime.timestamp}`}
-                    className="w-fit rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+                    className="w-fit cursor-pointer rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+                    onClick={() => {
+                      setSelectedDay(
+                        DateTime.fromMillis(v.startTime.timestamp).startOf(
+                          "day",
+                        ) as DateTime<true>,
+                      );
+                    }}
                   >
                     ⚠ {v.regulation.id} violation at{" "}
                     {DateTime.fromMillis(v.startTime.timestamp).toFormat(
@@ -144,7 +155,7 @@ const LogHead = ({
         <CycleList
           hosTimers={hosTimers}
           selectedDay={selectedDay}
-          setSelectedDay={onChange}
+          setSelectedDay={setSelectedDay}
         />
       </div>
     </section>

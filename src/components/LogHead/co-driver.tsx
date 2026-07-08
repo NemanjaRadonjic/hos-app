@@ -1,6 +1,6 @@
 import { IoPeopleSharp } from "react-icons/io5";
 import { Button } from "../ui/button";
-import { STATUS_MAP } from "@/lib/maps";
+import { EVENT_CODE_MAP } from "@/lib/maps";
 import { Badge } from "../ui/badge";
 import { FaTruckFront } from "react-icons/fa6";
 import { useDriverData } from "@/lib/hooks/useDriverData";
@@ -54,7 +54,7 @@ const CoDriver = ({ coDriverId }: CoDriverProps) => {
           background: `var(--hos-${driver?.status}-bg)`,
         }}
       >
-        {driver && STATUS_MAP[driver?.status]}
+        {driver && EVENT_CODE_MAP[driver?.status]}
       </Badge>
     </Button>
   );

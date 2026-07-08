@@ -34,7 +34,6 @@ import { findCertAnchorEvent } from "./helpers/find-cert-anchor";
 import { isDayCertified } from "./helpers/check-date-certified";
 import { runQueue, type QueueItem } from "../helpers/api-helpers";
 import { buildInterlocations } from "./helpers/build-interlocations";
-import { buildBasicEventType } from "@/components/LogEvent/EditForm/event-type-bodies";
 import { getCalculatedLocationData } from "../helpers/get-calculated-location";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
@@ -85,12 +84,16 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const {
     data,
     fetchNextPage: fetchPreviousRange,
+    fetchRange,
     hasNextPage: hasMore,
     isFetchingNextPage: isFetchingMore,
   } = useDailyLogsData(userId, selectedDay);
 
   const [status, setStatus] = useState<TransactionStatus>("idle");
 
+  const [deletedEventIds, setDeletedEventIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [events, _setEvents] = useState<HosEvent[]>([]);
   const setEvents = (next: HosEvent[] | ((prev: HosEvent[]) => HosEvent[])) => {
     _setEvents((prev) => {
@@ -130,40 +133,70 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // not on every render — avoids overwriting user edits
   const pageCount = data?.pages.length ?? 0;
 
-  const lastSyncedUserId = useRef<string | null>(null);
   useEffect(() => {
     setEvents([]);
     setDailyLogEdits({});
-    lastSyncedUserId.current = userId;
+    setDeletedEventIds(new Set());
   }, [userId]);
 
   useEffect(() => {
-    const eventsData = data?.eventsData ?? [];
+    const serverEvents = data?.eventsData ?? [];
+    if (serverEvents.length === 0) return;
 
-    // force re-sync if userId changed even if pageCount didn't
-    if (
-      eventsData.length > 0 &&
-      (pageCount > 0 || lastSyncedUserId.current !== userId)
-    ) {
-      lastSyncedUserId.current = userId;
-      setEvents(eventsData);
-    } else if (lastSyncedUserId.current !== userId) {
-      lastSyncedUserId.current = userId;
-      setEvents([]);
-    }
-  }, [pageCount, userId]);
+    setEvents((prev) => {
+      const prevIds = new Set(prev.map((event) => event._id));
 
-  // ─── prefetch trigger ─────────────────────────────────────────────────────
-  // when user navigates close to the oldest loaded date, fetch more
+      const eventsToAppend = serverEvents.filter(
+        (serverEvent) =>
+          !prevIds.has(serverEvent._id) &&
+          !deletedEventIds.has(serverEvent._id),
+      );
+
+      if (eventsToAppend.length === 0) return prev;
+
+      return [...prev, ...eventsToAppend];
+    });
+  }, [pageCount, userId, deletedEventIds]);
+
+  // SELECT DATE
   useEffect(() => {
-    if (!hasMore || isFetchingMore) return;
-    const oldestLoadedDate = data?.pages.at(-1)?.range.from;
-    if (!oldestLoadedDate) return;
-    const daysFromOldest = selectedDay.diff(oldestLoadedDate, "days").days;
-    if (daysFromOldest <= CHUNK_DAYS) {
-      fetchPreviousRange();
+    if (!data) return;
+
+    const selectedDate = selectedDay.startOf("day");
+
+    const isLoaded = data.pages.some((page) => {
+      return selectedDate >= page.range.from && selectedDate <= page.range.to;
+    });
+
+    if (isLoaded) return;
+
+    fetchRange({
+      from: selectedDay.minus({ days: 8 }).startOf("day"),
+      to: selectedDay.plus({ days: 8 }).endOf("day"),
+    });
+  }, [selectedDay, data?.pages.length, fetchRange]);
+
+  // PREFETCH
+  useEffect(() => {
+    if (!data || isFetchingMore) return;
+
+    const selected = selectedDay.startOf("day");
+
+    const page = data.pages.find(
+      (page) => selected >= page.range.from && selected <= page.range.to,
+    );
+
+    if (!page) return;
+
+    const daysFromStart = selected.diff(page.range.from, "days").days;
+
+    if (daysFromStart <= CHUNK_DAYS / 2) {
+      fetchRange({
+        from: page.range.from.minus({ days: CHUNK_DAYS + 1 }).startOf("day"),
+        to: page.range.from.minus({ days: 1 }).endOf("day"),
+      });
     }
-  }, [selectedDay, pageCount]);
+  }, [selectedDay, data?.pages.length, isFetchingMore]);
 
   // in reality, currently, this is dependant on an another event
   // its used on duplicate only
@@ -192,7 +225,13 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       return;
     }
 
-    setEvents(events.filter((e) => !ids.has(e._id)));
+    setDeletedEventIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    setEvents((prev) => prev.filter((e) => !ids.has(e._id)));
   };
 
   const updateEvent = (id: string, updater: (event: HosEvent) => HosEvent) => {
@@ -398,6 +437,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     setEvents(freshData.eventsData);
     setDailyLogEdits({});
+    setDeletedEventIds(new Set());
     return {
       failed: [],
     };
@@ -407,13 +447,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // events properly yet, this will have some false changes that are basically the
   // same events/logs
   const getSavePayload = useCallback(() => {
-    // const diffKeys = (a: any, b: any) => {
-    //   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
-
-    //   return [...keys].filter(
-    //     (key) => JSON.stringify(a?.[key]) !== JSON.stringify(b?.[key]),
-    //   );
-    // };
     const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
       "driverData",
       userId,
@@ -426,35 +459,16 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     const originalMap = new Map(originalEvents.map((e) => [e._id, e]));
 
-    const currentMap = new Map(events.map((e) => [e._id, e]));
-
     const changedEvents = events.filter((curr) => {
       const orig = originalMap.get(curr._id);
 
       const changed = JSON.stringify(orig) !== JSON.stringify(curr);
 
-      // if (changed) {
-      //   for (const key of diffKeys(orig, curr)) {
-      //     console.log(key, {
-      //       original: orig?.[key],
-      //       current: curr?.[key],
-      //     });
-      //   }
-      //   console.log("original order", Object.keys(orig ?? {}));
-      //   console.log("current order", Object.keys(curr));
-      // }
-
       return changed;
     });
 
-    const deletedEventIds = originalEvents
-      .filter((e) => !currentMap.has(e._id))
-      .map((e) => e._id);
+    const deletedEventIdsToSave = [...deletedEventIds];
 
-    // const changedLogs = Object.entries(dailyLogEdits).map(([id, edits]) => {
-    //   const base = originalLogs.find((l) => l._id === id);
-    //   return { ...base, ...edits };
-    // });
     const changedLogs = Object.entries(dailyLogEdits)
       .map(([id, editedLog]) => {
         if (!driver || !company) return null;
@@ -476,10 +490,19 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     return {
       changedEvents,
-      deletedEventIds,
+      deletedEventIds: deletedEventIdsToSave,
       changedLogs,
     };
-  }, [queryClient, userId, events, dailyLogEdits]);
+  }, [
+    queryClient,
+    userId,
+    events,
+    dailyLogEdits,
+    deletedEventIds,
+    driver,
+    company,
+    selectedDay,
+  ]);
 
   // temp log
   const savePayload = getSavePayload();
@@ -505,6 +528,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
     setEvents(originalEvents);
     setDailyLogEdits({});
+    setDeletedEventIds(new Set());
   };
 
   // FUNCTIONS ////////////////////////////////////////////////////////////////
@@ -683,7 +707,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       );
       return {
         ...selected,
-
+        _id: generateHosEventId(),
+        eventCode: { id: "LOG_NORMAL_PRECISION" },
         eventTime: {
           ...selected.eventTime,
           timestamp: point.timestamp,
@@ -706,10 +731,6 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       };
     });
 
-    const newEvents = interlocationEvents.map((iE) =>
-      buildBasicEventType(iE, "LOG_NORMAL_PRECISION", generateHosEventId()),
-    );
-
     setEvents((prev) => [
       ...prev.filter(
         (event) =>
@@ -720,7 +741,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
             event.eventTime.timestamp < endEvent.eventTime.timestamp
           ),
       ),
-      ...newEvents,
+      ...interlocationEvents,
     ]);
   };
 

@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "./ui/table";
-import { STATUS_MAP } from "@/lib/maps";
+import { EVENT_CODE_MAP } from "@/lib/maps";
 import { HosGauge } from "./hos-gauge";
 import type { DriverTableData } from "@/routes";
 import "@tanstack/react-table";
@@ -53,7 +53,7 @@ const columns: ColumnDef<DriverSimplified>[] = [
             color: `var(--hos-${s}-fg)`,
           }}
         >
-          {STATUS_MAP[s]}
+          {EVENT_CODE_MAP[s]}
         </Badge>
       );
     },
@@ -61,18 +61,7 @@ const columns: ColumnDef<DriverSimplified>[] = [
   {
     header: "Location",
     accessorKey: "location",
-    cell: ({ row }) => {
-      if (row.getValue<string>("location") == "Justice, IL") {
-        return (
-          <div className="flex gap-2">
-            {row.getValue<string>("location")}{" "}
-            <Badge className="bg-teal-500 font-bold">Yard</Badge>
-          </div>
-        );
-      } else {
-        return row.getValue<string>("location");
-      }
-    },
+    cell: ({ row }) => row.getValue<string>("location"),
   },
   {
     header: "Break",

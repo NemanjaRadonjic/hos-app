@@ -27,13 +27,13 @@ export const TagInput = ({
 
   const addTag = (tag: string) => {
     const trimmed = tag.trim();
-    if (!trimmed || value.includes(trimmed)) return;
+    if (!trimmed) return;
     onChange([...value, trimmed]);
     setInput("");
   };
 
-  const removeTag = (tag: string) => {
-    onChange(value.filter((t) => t !== tag));
+  const removeTag = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -42,7 +42,7 @@ export const TagInput = ({
       addTag(input);
     }
     if (e.key === "Backspace" && input === "" && value.length > 0) {
-      removeTag(value[value.length - 1]);
+      removeTag(value.length - 1);
     }
   };
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -87,14 +87,13 @@ export const TagInput = ({
       onClick={() => inputRef.current?.focus()}
     >
       {value.map((tag, index) => (
-        <div className="relative">
+        <div key={`${tag}-${index}`} className="relative">
           {copiedTag === tag && (
             <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 absolute -top-8 left-1/2 z-50 -translate-x-1/2 rounded-md bg-black px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-md duration-150">
               Copied!
             </div>
           )}
           <Badge
-            key={tag}
             variant={variant}
             draggable
             onDragStart={() => setDragIndex(index)}
@@ -129,7 +128,7 @@ export const TagInput = ({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                removeTag(tag);
+                removeTag(index);
               }}
               className="hover:text-destructive ml-1"
             >
@@ -150,6 +149,15 @@ export const TagInput = ({
         placeholder={value.length === 0 ? placeholder : ""}
         className="placeholder:text-muted-foreground min-w-20 flex-1 bg-transparent outline-none"
       />
+      <Badge
+        className="cursor-pointer shadow-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          addTag("NA");
+        }}
+      >
+        NA
+      </Badge>
     </div>
   );
 };

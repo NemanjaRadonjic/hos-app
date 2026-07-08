@@ -53,7 +53,7 @@ export const STATE_NAMES: Record<string, string> = {
   WY: "Wyoming",
 };
 
-export const STATUS_MAP = {
+export const EVENT_CODE_MAP = {
   DS_OFF: "Off Duty", // DONE
   DS_WT: "Off Duty (Waiting Time)",
   DS_ON: "On Duty", // DONE
@@ -61,10 +61,14 @@ export const STATUS_MAP = {
   DS_SB: "Sleeper", // DONE
   DR_LOGIN: "Login", // DONE
   DR_LOGOUT: "Logout", // DONE
-  MALF_LOGGED: "Engine synchronization compliance malfunction", // DONE
-  MALF_CLEARED: "Engine synchronization compliance", // DONE
-  DIAG_LOGGED: "Unidentified driving records data diagnostic", // DONE
-  DIAG_CLEARED: "Power data diagnostic (cleared)", // DONE
+  // MALF_LOGGED: "Engine synchronization compliance malfunction", // DONE
+  // MALF_CLEARED: "Engine synchronization compliance", // DONE
+  // DIAG_LOGGED: "Unidentified driving records data diagnostic", // DONE
+  // DIAG_CLEARED: "Power data diagnostic (cleared)", // DONE
+  MALF_LOGGED: "Engine sync malfunction",
+  MALF_CLEARED: "Engine sync restored",
+  DIAG_LOGGED: "Unidentified Records Diagnostic",
+  DIAG_CLEARED: "Diagnostic cleared",
   LOG_NORMAL_PRECISION: "Intermediate w/ CLP", // DONE
   LOG_REDUCED_PRECISION: "Intermediate w/ RLP",
   ENG_UP_NORMAL: "Engine Power-up w/ CLP", // DONE
@@ -86,12 +90,34 @@ export const STATUS_MAP = {
 
 export type EventCode = keyof typeof STATUS_MAP;
 
+export const STATUS_MAP = {
+  ACTIVE: "Active",
+  INACTIVE_CHANGED: "Inactive changed",
+  INACTIVE_CHANGED_REQUESTED: "Inactive change requested",
+  INACTIVE_CHANGED_REJECTED: "Inactive change rejected",
+};
+
 export const ORIGIN_MAP = {
   DRIVER: "Driver",
   ELD: "Auto",
   OTHER_USER: "Other user",
   WITHOUT_ORIGIN: "Without origin",
   UNIDENTIFIED_DRIVER: "Unidentified Driver",
+};
+
+export const STATUS_MAP_SHORT = {
+  ACTIVE: "Active",
+  INACTIVE_CHANGED: "Inactive",
+  INACTIVE_CHANGED_REQUESTED: "Inactive",
+  INACTIVE_CHANGED_REJECTED: "Inactive",
+};
+
+export const ORIGIN_MAP_SHORT = {
+  DRIVER: "Driver",
+  ELD: "Auto",
+  OTHER_USER: "Other",
+  WITHOUT_ORIGIN: "Without origin",
+  UNIDENTIFIED_DRIVER: "UE",
 };
 
 export const TZ_MAP: Record<string, string> = {

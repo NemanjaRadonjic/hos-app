@@ -1,4 +1,4 @@
-import { EVENT_BADGE_COLORS, mainEventCodes, STATUS_MAP } from "@/lib/maps";
+import { EVENT_BADGE_COLORS, mainEventCodes, EVENT_CODE_MAP } from "@/lib/maps";
 import { Badge } from "./badge";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,7 @@ export default function StatusBadge({ status }: { status: string }) {
           }}
         />
       )}
-      {STATUS_MAP[status]}
+      {EVENT_CODE_MAP[status]}
     </Badge>
   );
 }

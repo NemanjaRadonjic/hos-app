@@ -1,7 +1,14 @@
 import { Checkbox } from "../ui/checkbox";
 import { TableCell, TableRow } from "../ui/table";
 import { DateTime, Duration } from "luxon";
-import { ICON_SIZES, ORIGIN_MAP, TZ_MAP } from "@/lib/maps";
+import {
+  ICON_SIZES,
+  ORIGIN_MAP,
+  ORIGIN_MAP_SHORT,
+  STATUS_MAP,
+  STATUS_MAP_SHORT,
+  TZ_MAP,
+} from "@/lib/maps";
 import { Badge } from "../ui/badge";
 import type { HosEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -14,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import {
   BiError,
   BiSolidDuplicate,
+  BiSolidEdit,
   BiSolidMessageSquareEdit,
   BiSolidTrashAlt,
 } from "react-icons/bi";
@@ -25,7 +33,11 @@ import {
   isUserLockedEvent,
 } from "@/lib/hooks/useTransaction";
 import { FaLock, FaUnlock } from "react-icons/fa6";
-import { MdError } from "react-icons/md";
+import { MdEditDocument, MdError } from "react-icons/md";
+import { FaEdit } from "react-icons/fa";
+import { RiFileEditFill, RiLockFill, RiLockStarFill } from "react-icons/ri";
+import { HiDocumentDuplicate } from "react-icons/hi2";
+import { checkKnownLocation } from "@/lib/helpers/check-known-location";
 
 interface LogEventProps {
   event: HosEvent;
@@ -112,15 +124,18 @@ const LogEvent = ({
     {} as Record<string, typeof eventInfo.issues>,
   );
 
-  const isLocked = isServerLockedEvent(event);
+  const isServerLocked = isServerLockedEvent(event);
   const isUserLocked = isUserLockedEvent(event);
-
   const unlockUserLockedEvent = () =>
     updateEvent(event._id, () => {
       const { eventComment, ...rest } = event;
 
       return rest;
     });
+
+  const knownLocation = checkKnownLocation(event.location);
+
+  const isTimeError = eventInfo.issues.some((issue) => issue.group === "Time");
 
   const isLocationError = eventInfo.issues.some(
     (issue) => issue.group === "Location",
@@ -145,6 +160,11 @@ const LogEvent = ({
   const isOriginError = eventInfo.issues.some(
     (issue) => issue.group === "Origin",
   );
+
+  const isStatusError = eventInfo.issues.some(
+    (issue) => issue.group === "Status",
+  );
+
   const engineHoursIssueSeverity = eventInfo.issues.some(
     (i) => i.group === "Engine Hours" && i.severity === "error",
   )
@@ -165,9 +185,9 @@ const LogEvent = ({
         transitionDelay: focused ? "0ms" : "0ms",
       }}
       className={cn(
-        "border-l-2 text-xs transition-all duration-200",
+        "text-md border-l-2 transition-all duration-200",
 
-        isLocked
+        isServerLocked || isUserLocked
           ? "bg-muted hover:bg-muted"
           : focused
             ? eventInfo.hasError
@@ -190,33 +210,41 @@ const LogEvent = ({
       >
         <Checkbox checked={checked} />
       </TableCell>
-      <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
+      <TableCell
+        className={cn(
+          "text-muted-foreground font-mono text-xs whitespace-nowrap",
+          isTimeError && "text-error-fg font-semibold",
+        )}
+      >
         {formatTimestampEvent(event.eventTime.timestamp, tz)}
       </TableCell>
-      <TableCell>
+      <TableCell className="py-0">
         {eventInfo.duration != null && eventInfo.duration > 0 && (
-          <Badge variant="secondary" className="bg-transparent text-gray-600">
+          <Badge variant="secondary" className="text-gray-600">
             {msToHoursMinutes(eventInfo.duration)}
           </Badge>
         )}
       </TableCell>
-      <EventCode event={event} setEditingEvent={setEditingEvent} />
-      <TableCell className="text-muted-foreground flex max-w-[400px] gap-2 truncate">
+      <EventCode event={event} />
+      <TableCell className="text-muted-foreground flex max-w-[400px] gap-4">
         <Location isLocationError={isLocationError} event={event} />
+        {knownLocation && (
+          <Badge className="shadow-sm">{knownLocation.location.type}</Badge>
+        )}
       </TableCell>
       <TableCell>
         {!!eventInfo.issues.length && (
           <Tooltip>
             <TooltipTrigger asChild>
               <span
-                className={`${hasError ? "text-error-fg" : "text-warning-bg"} flex items-center gap-1`}
+                className={`${hasError ? "text-error-fg" : "text-warning-bg"} flex items-center gap-1 font-semibold`}
               >
-                <MdError />
+                <MdError className="size-4 shrink-0" />
                 {eventInfo.issues.length}
               </span>
             </TooltipTrigger>
 
-            <TooltipContent side="top" className="mb-2 min-w-fit">
+            <TooltipContent side="top" className="bg-muted mb-2 min-w-fit">
               <div className="my-1 min-w-[250px] space-y-3">
                 {Object.entries(groupedIssues).map(([group, issues]) => (
                   <div key={group}>
@@ -248,27 +276,34 @@ const LogEvent = ({
           </Tooltip>
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-center text-xs">
-        {event.recordStatus?.id}
+      <TableCell
+        className={cn(
+          "text-muted-foreground truncate text-center text-xs",
+          isStatusError && "text-error-fg font-semibold",
+        )}
+      >
+        {STATUS_MAP_SHORT[event.recordStatus?.id]}
       </TableCell>
       <TableCell
         className={cn(
-          "text-muted-foreground text-center text-xs",
-          isOriginError && "text-error-fg",
+          "text-muted-foreground truncate text-center text-xs",
+          isOriginError && "text-error-fg font-semibold",
         )}
       >
-        {ORIGIN_MAP[event.recordOrigin?.id]}
+        {ORIGIN_MAP_SHORT[event.recordOrigin?.id]}
       </TableCell>
       <TableCell className="tabular-nums">
         <div className="flex items-center gap-2">
-          <span className={cn(isOdometerError && "text-error-fg")}>
+          <span
+            className={cn(isOdometerError && "text-error-fg font-semibold")}
+          >
             {event.totalVehicleMiles}
           </span>
 
           {eventInfo.odoDelta != null && eventInfo.odoDelta !== 0 && (
             <div
               className={cn(
-                "font-bold",
+                "font-semibold",
                 eventInfo.odoDelta < 0 ? "text-error-fg" : "text-success-fg",
               )}
             >
@@ -280,13 +315,15 @@ const LogEvent = ({
       </TableCell>
       <TableCell className="tabular-nums">
         <div className="flex items-center gap-2">
-          <span className={cn(isEngineHoursError && "text-error-fg")}>
+          <span
+            className={cn(isEngineHoursError && "text-error-fg font-semibold")}
+          >
             {event.totalEngineHours}
           </span>
           {eventInfo.engHoursDelta != null && eventInfo.engHoursDelta !== 0 && (
             <div
               className={cn(
-                "text-success-fg font-bold",
+                "text-success-fg font-semibold",
                 engineHoursIssueSeverity === "error" && "text-error-fg",
                 engineHoursIssueSeverity === "warning" && "text-warning-bg",
               )}
@@ -297,55 +334,99 @@ const LogEvent = ({
           )}
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-muted-foreground p-0 text-xs">
         {event.eventComment && (
-          <Badge variant="outline" className="[&>svg]:size-auto">
-            {badgeIcons.map(({ Icon, color, size }, i) => (
-              <Icon
-                key={i}
-                color={color}
-                size={(size ?? ICON_SIZES.default) - 4}
-              />
-            ))}
-            {event.eventComment}
-          </Badge>
+          <div className="group relative w-full min-w-0">
+            <Badge
+              variant="secondary"
+              className="flex max-w-full min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap shadow-sm [&>svg]:size-auto [&>svg]:shrink-0"
+            >
+              {badgeIcons.map(({ Icon, color, size }, i) => (
+                <Icon
+                  key={i}
+                  color={color}
+                  size={(size ?? ICON_SIZES.default) - 4}
+                />
+              ))}
+
+              <span className="min-w-0 flex-1 truncate">
+                {event.eventComment}
+              </span>
+            </Badge>
+
+            <Badge
+              variant="secondary"
+              className="pointer-events-none absolute top-0 left-0 z-50 hidden w-max max-w-[500px] items-center gap-1 whitespace-nowrap shadow-lg group-hover:flex [&>svg]:size-auto [&>svg]:shrink-0"
+            >
+              {badgeIcons.map(({ Icon, color, size }, i) => (
+                <Icon
+                  key={i}
+                  color={color}
+                  size={(size ?? ICON_SIZES.default) - 4}
+                />
+              ))}
+
+              {event.eventComment}
+            </Badge>
+          </div>
         )}
       </TableCell>
-      <TableCell className="flex items-center justify-center gap-2 text-lg">
-        {isLocked ? (
-          <FaLock className="text-muted-foreground size-4" />
+      <TableCell className="p-0">
+        {isServerLocked ? (
+          <div className="flex h-9 items-stretch justify-center">
+            <div className="flex h-full w-9 items-center justify-center">
+              <RiLockStarFill className="text-muted-foreground size-4.5" />
+            </div>
+          </div>
         ) : isUserLocked ? (
-          <button
-            onClick={unlockUserLockedEvent}
-            className="group cursor-pointer"
-          >
-            <FaLock className="size-4 group-hover:hidden" />
-            <FaUnlock className="hidden size-4 text-blue-500 group-hover:block" />
-          </button>
-        ) : (
-          <>
-            <BiSolidMessageSquareEdit
-              className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
-              onClick={() => setEditingEvent(event)}
-            />
-
-            <BiSolidDuplicate
-              className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
+          <div className="flex h-9 items-stretch justify-center">
+            <button
+              className="group flex h-full w-9 cursor-pointer items-center justify-center rounded-sm transition-colors hover:bg-black/10"
               onClick={(e) => {
                 e.stopPropagation();
+                unlockUserLockedEvent();
+              }}
+            >
+              <RiLockFill className="text-muted-foreground group-hover:text-accent size-4.5 transition-colors" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-9 items-stretch justify-center">
+            <button
+              className="group flex h-full w-9 cursor-pointer items-center justify-center rounded-sm transition-colors hover:bg-black/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingEvent(event);
+              }}
+            >
+              <MdEditDocument className="text-muted-foreground group-hover:text-accent size-4.5 transition-colors" />
+            </button>
+
+            <button
+              className="group flex h-full w-9 cursor-pointer items-center justify-center rounded-sm transition-colors hover:bg-black/10"
+              onClick={(e) => {
+                e.stopPropagation();
+
                 const duplicatedEvent = duplicateEvent(event);
                 if (duplicatedEvent) {
                   setEditingEvent(duplicatedEvent);
                   setFocusedId(duplicatedEvent._id);
                 }
               }}
-            />
+            >
+              <HiDocumentDuplicate className="text-muted-foreground group-hover:text-accent size-4.5 transition-colors" />
+            </button>
 
-            <BiSolidTrashAlt
-              className="text-muted-foreground hover:text-destructive cursor-pointer transition-colors duration-150"
-              onClick={() => deleteEvents(event._id)}
-            />
-          </>
+            <button
+              className="group flex h-full w-9 cursor-pointer items-center justify-center rounded-sm transition-colors hover:bg-black/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteEvents(event._id);
+              }}
+            >
+              <BiSolidTrashAlt className="text-muted-foreground group-hover:text-error-fg size-4.5 transition-colors" />
+            </button>
+          </div>
         )}
       </TableCell>
       <TableCell className="text-xs">{event.eld?.sn?.slice(-4)}</TableCell>

@@ -69,7 +69,7 @@ export const useDriversData = (): UseDriversDataResult => {
       })
       .map((status) => {
         const driver = users.find((u) => u._id === status.userId)!;
-        console.log({ driver });
+
         const vehicle = vehicles.find(
           (v: Vehicle) => v._id === status.vehicle.id,
         );

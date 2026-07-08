@@ -18,7 +18,7 @@ import type { HosEvent } from "@/lib/types";
 import type { IconType } from "react-icons/lib";
 import type { DutyEvent, EventCode } from "./types";
 import { isActiveEvent, isDutyEvent } from "@/lib/hos/helpers";
-import type { Violation } from "@/lib/hos/calculations";
+import type { Violation } from "@/lib/hos/calculations-old";
 import drawViolationOverlay from "./drawViolationOverlay";
 import { useSelectionStore } from "@/lib/store/useSelectionStore";
 import { isInterlocationEvent } from "@/lib/log-check/helpers/status-type-checks";

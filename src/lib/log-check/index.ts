@@ -11,6 +11,7 @@ import {
   isMovementEvent,
   isStopEvent,
 } from "./helpers/status-type-checks";
+import { ORIGIN_MAP, STATUS_MAP } from "../maps";
 
 export type LogIssueCode =
   | "MISSING_SIGNATURE"
@@ -53,7 +54,8 @@ type ISSUE_GROUP =
   | "Status"
   | "Time"
   | "Possible speeding"
-  | "Interlocation";
+  | "Interlocation"
+  | "Event";
 
 export type LogIssue = {
   eventId?: string;
@@ -454,19 +456,6 @@ export function buildLogCheck({
       });
     }
     // ORIGIN
-    if (
-      event.recordOrigin &&
-      !["ELD", "DRIVER"].includes(event.recordOrigin?.id)
-    ) {
-      issues.push({
-        group: "Origin",
-        code: "INVALID_ORIGIN",
-        eventId: event._id,
-        logDate: event.eventTime.logDate.date,
-        severity: "error",
-        message: "Invalid origin.",
-      });
-    }
     if (event.recordOrigin?.id === "ELD" && event.eventComment) {
       issues.push({
         group: "Origin",
@@ -498,7 +487,7 @@ export function buildLogCheck({
             eventId: event._id,
             logDate: event.eventTime.logDate.date,
             severity: "error",
-            message: `Invalid origin.`,
+            message: `'${ORIGIN_MAP[event.recordOrigin?.id]}' origin is invalid.`,
           });
         }
       } else if (event.eventCode.id !== "DS_ON") {
@@ -509,9 +498,23 @@ export function buildLogCheck({
             eventId: event._id,
             logDate: event.eventTime.logDate.date,
             severity: "error",
-            message: `Invalid origin.`,
+            message: `'${ORIGIN_MAP[event.recordOrigin?.id]}' origin is invalid.`,
           });
         }
+      }
+    } else {
+      if (
+        event.recordOrigin &&
+        !["ELD", "DRIVER"].includes(event.recordOrigin?.id)
+      ) {
+        issues.push({
+          group: "Origin",
+          code: "INVALID_ORIGIN",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "error",
+          message: `'${ORIGIN_MAP[event.recordOrigin?.id]}' origin is invalid.`,
+        });
       }
     }
 
@@ -524,7 +527,7 @@ export function buildLogCheck({
           eventId: event._id,
           logDate: event.eventTime.logDate.date,
           severity: "error",
-          message: `Invalid status.`,
+          message: `'${STATUS_MAP[event.recordStatus?.id]}' status is invalid.`,
         });
       }
     }
@@ -598,7 +601,7 @@ export function buildLogCheck({
     const isInterlocation = isInterlocationEvent(event);
     if (!isInterlocation && prevEvent?.eventCode.id === event.eventCode.id) {
       issues.push({
-        group: "Status",
+        group: "Event",
         code: "DUPLICATE_STATUS",
         eventId: event._id,
         logDate: event.eventTime.logDate.date,

@@ -32,7 +32,7 @@ function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
 
-function distanceMiles(a: Point, b: Point) {
+export function distanceMiles(a: Point, b: Point) {
   const R = 6371000;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);

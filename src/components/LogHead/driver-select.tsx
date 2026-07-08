@@ -12,12 +12,12 @@ import {
 } from "../ui/command";
 import { useNavigate } from "@tanstack/react-router";
 import { Badge } from "../ui/badge";
-import { STATUS_MAP } from "@/lib/maps";
+import { EVENT_CODE_MAP } from "@/lib/maps";
 import { useDriversData } from "@/lib/hooks/useDriversData";
 import { useDriverData } from "@/lib/hooks/useDriverData";
 import { FaTruckFront } from "react-icons/fa6";
 import { useState } from "react";
-import { MdClear, MdEdit } from "react-icons/md";
+import { MdClear } from "react-icons/md";
 import { toast } from "sonner";
 
 type DriverSelectProps = {
@@ -71,7 +71,7 @@ const DriverSelect = ({
                 color: `var(--hos-${driver?.status}-fg)`,
               }}
             >
-              {STATUS_MAP[driver?.status]}
+              {EVENT_CODE_MAP[driver?.status]}
             </Badge>
           </Button>
         </PopoverTrigger>
@@ -121,7 +121,7 @@ const DriverSelect = ({
                             color: `var(--hos-${driverOption.status}-fg)`,
                           }}
                         >
-                          {STATUS_MAP[driverOption.status]}
+                          {EVENT_CODE_MAP[driverOption.status]}
                         </Badge>
                       </CommandItem>
                     ))}

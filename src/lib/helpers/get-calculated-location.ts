@@ -113,7 +113,7 @@ export function getCalculatedLocationData(lat: number, lon: number) {
 
   const miles = Math.round(distance);
 
-  if (miles === 0) {
+  if (miles <= 1) {
     return {
       calculatedLocation: `${city.name}, ${city.state}`,
       state: STATE_NAMES[city.state],

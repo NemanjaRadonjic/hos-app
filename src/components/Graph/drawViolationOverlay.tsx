@@ -1,4 +1,4 @@
-import type { Violation } from "@/lib/hos/calculations";
+import type { Violation } from "@/lib/hos/calculations-old";
 import type { GraphSizes } from "./types";
 import { DateTime } from "luxon";
 
@@ -22,7 +22,6 @@ export default function drawViolationOverlay({
   const vStart = violation.startTs;
   const vEnd = violation.endTs ?? Date.now();
 
-  // 🔥 correct intersection
   const start = Math.max(vStart, dayStart);
   const end = Math.min(vEnd, dayEnd);
 

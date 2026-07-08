@@ -10,7 +10,7 @@ import {
 import StatusBadge from "@/components/ui/status-badge";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { useDriversData } from "@/lib/hooks/useDriversData";
-import { STATUS_MAP } from "@/lib/maps";
+import { EVENT_CODE_MAP } from "@/lib/maps";
 import { useEffect, useState } from "react";
 import type { Draft, DraftEventErrors, EventFamily } from "../helpers/types";
 import type { HosEvent } from "@/lib/types";
@@ -36,6 +36,17 @@ import DateAndTimePicker from "@/components/ui/date-time-picker";
 import { FieldError } from "./field-error";
 import { buildPayload } from "./build-payload";
 import { FaMapLocationDot } from "react-icons/fa6";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const mainStatusSet = new Set([
   "DS_OFF",
@@ -79,13 +90,13 @@ const parseCoord = (v: string) => {
 
 const mainStatusOptions = Array.from(mainStatusSet).map((key) => ({
   value: key,
-  label: STATUS_MAP[key],
+  label: EVENT_CODE_MAP[key],
 }));
-const otherStatusOptions = Object.keys(STATUS_MAP)
+const otherStatusOptions = Object.keys(EVENT_CODE_MAP)
   .filter((key) => !mainStatusSet.has(key))
   .map((key) => ({
     value: key,
-    label: STATUS_MAP[key],
+    label: EVENT_CODE_MAP[key],
   }));
 export const STATUS_SELECT_GROUPS = [
   {
@@ -115,6 +126,19 @@ const statusOptions = STATUS_SELECT_GROUPS.map((group) => (
     ))}
   </SelectGroup>
 ));
+
+const NOTE_CHIPS = [
+  "PTI",
+  "Fuel",
+  "Pickup",
+  "Delivery",
+  "Hook",
+  "Drop",
+  "Drop & Hook",
+  "swap",
+  "test",
+  "Inspection",
+];
 
 type FormState = {
   lat: string;
@@ -171,6 +195,21 @@ export function EditEventModal({
   }, [event]);
 
   if (!draft) return null;
+
+  const updateEventCode = (eventCode: string) => {
+    setDraft((prev) => {
+      if (!prev || !event) return prev;
+
+      const nextDraft = buildDraft({
+        event,
+        eventCode,
+        draft: prev,
+      });
+
+      setErrors(validateDraft(nextDraft));
+      return nextDraft;
+    });
+  };
 
   const updateLocation = (
     patch: NonNullable<Partial<HosEvent["location"]>>,
@@ -232,6 +271,26 @@ export function EditEventModal({
   };
   const canEdit = (field: string) =>
     FAMILY_EDITABLE_FIELDS[draft.family]?.includes(field);
+
+  function toggleNoteChip(currentNote: string | undefined, chip: string) {
+    const parts = (currentNote ?? "")
+      .split(", ")
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    const exists = parts.includes(chip);
+
+    const next = exists ? parts.filter((p) => p !== chip) : [...parts, chip];
+
+    return next.join(", ");
+  }
+  function hasNoteChip(note: string | undefined, chip: string) {
+    return (note ?? "")
+      .split(", ")
+      .map((p) => p.trim())
+      .includes(chip);
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex w-lg flex-col gap-4">
@@ -289,31 +348,44 @@ export function EditEventModal({
         </div>
         <div className="flex gap-2">
           <Label className="w-28">Event type</Label>
-          <Select
-            value={draft.event.eventCode}
-            onValueChange={(value) => {
-              setDraft((prev) => {
-                if (!prev || !event) return prev;
 
-                const nextDraft = buildDraft({
-                  event,
-                  eventCode: value,
-                  draft,
-                });
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="justify-start border-none">
+                <StatusBadge status={draft.event.eventCode} />
+              </Button>
+            </DropdownMenuTrigger>
 
-                setErrors(validateDraft(nextDraft));
-                return nextDraft;
-              });
-            }}
-          >
-            <SelectTrigger className="border-none">
-              <SelectValue />
-            </SelectTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              {mainStatusOptions.map((opt) => (
+                <DropdownMenuItem
+                  key={opt.value}
+                  className="hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted cursor-pointer"
+                  onClick={() => updateEventCode(opt.value)}
+                >
+                  <StatusBadge status={opt.value} />
+                </DropdownMenuItem>
+              ))}
 
-            <SelectContent position="popper" align="start">
-              {statusOptions}
-            </SelectContent>
-          </Select>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Other</DropdownMenuSubTrigger>
+
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent className="max-h-80 w-72 overflow-y-auto">
+                    {otherStatusOptions.map((opt) => (
+                      <DropdownMenuItem
+                        key={opt.value}
+                        className="hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted cursor-pointer"
+                        onClick={() => updateEventCode(opt.value)}
+                      >
+                        <StatusBadge status={opt.value} />
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         {draft.family === "CERT" && (
           <div className="relative flex gap-2">
@@ -382,12 +454,12 @@ export function EditEventModal({
                 <SelectItem value="INACTIVE_CHANGED">
                   Inactive Changed
                 </SelectItem>
-                {/* <SelectItem>
-                Inactive Change Requested
-              </SelectItem>
-              <SelectItem>
-                Inactive Change Rejected
-              </SelectItem> */}
+                <SelectItem value="INACTIVE_CHANGED_REQUESTED">
+                  Inactive Change Requested
+                </SelectItem>
+                <SelectItem value="INACTIVE_CHANGED_REJECTED">
+                  Inactive Change Rejected
+                </SelectItem>
               </SelectContent>
             </Select>
             <FieldError error={errors?.status} />
@@ -586,17 +658,39 @@ export function EditEventModal({
           </div>
         )}
 
-        <div className="flex gap-2">
-          <Label className="w-28">Note</Label>
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Label className="w-28">Note</Label>
+
             <Input
+              className="ml-7"
               onKeyDown={(e) => e.stopPropagation()}
               disabled={!canEdit("eventComment")}
               value={draft.event.note ?? ""}
-              onChange={(e) => {
-                updateDraft({ note: e.target.value });
-              }}
+              onChange={(e) => updateDraft({ note: e.target.value })}
             />
+          </div>
+
+          <div className="ml-30 flex flex-wrap gap-1">
+            {NOTE_CHIPS.map((note) => (
+              <Badge
+                key={note}
+                className="cursor-pointer shadow-sm"
+                variant={
+                  hasNoteChip(draft.event.note, note) ? "default" : "secondary"
+                }
+                size="sm"
+                onClick={() => {
+                  if (canEdit("eventComment")) {
+                    updateDraft({
+                      note: toggleNoteChip(draft.event.note, note),
+                    });
+                  }
+                }}
+              >
+                {note}
+              </Badge>
+            ))}
           </div>
         </div>
         <DialogFooter>

@@ -1,4 +1,4 @@
-import { isDriving, isOnDuty } from "./helpers";
+import { isDriving, isOnDuty, isRest } from "./helpers";
 import { buildSegments, type Segment } from "./segments";
 import type { HosEvent } from "../types";
 import { DateTime } from "luxon";
@@ -47,74 +47,24 @@ const EIGHT_HOURS_MS = 8 * 60 * MINUTE_MS;
 const THIRTY_MIN_MS = 30 * MINUTE_MS;
 const RESTART_34H_MS = 34 * 60 * 60 * 1000;
 const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000;
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const SEVEN_HOURS_MS = 7 * 60 * 60 * 1000;
 const TEN_HOURS_MS = 10 * 60 * 60 * 1000;
+
+function getNextFullResetStartTs(rests: RestInfo[], afterTs: number) {
+  return (
+    rests.find((r) => r.isFullReset && r.startTs > afterTs)?.startTs ?? null
+  );
+}
 
 const fmt = (ts: number) =>
   DateTime.fromMillis(ts).toFormat("MMM d, h:mm:ss a");
 
-function getResetEndTs(segments: Segment[], fromIndex: number): number | null {
-  let pendingBig: { index: number; durationMs: number } | null = null;
-  let pendingSmall: { index: number; durationMs: number } | null = null;
-  let consecutiveRestMs = 0;
+const h = (ms: number | null | undefined) =>
+  ms == null ? "-" : `${(ms / 3600000).toFixed(2)}h`;
 
-  for (let i = fromIndex; i < segments.length; i++) {
-    const seg = segments[i];
-
-    if (seg.status === "DS_SB" || seg.status === "DS_OFF") {
-      consecutiveRestMs += seg.durationMs;
-      if (consecutiveRestMs >= TEN_HOURS_MS) return seg.endTs;
-    } else {
-      consecutiveRestMs = 0;
-    }
-
-    const isBig =
-      seg.status === "DS_SB" &&
-      seg.durationMs >= 7 * 60 * 60 * 1000 &&
-      seg.durationMs < TEN_HOURS_MS;
-
-    const isSmall =
-      (seg.status === "DS_SB" || seg.status === "DS_OFF") &&
-      seg.durationMs >= 2 * 60 * 60 * 1000 &&
-      seg.durationMs < 7 * 60 * 60 * 1000;
-
-    if (isBig) {
-      if (pendingSmall !== null) {
-        const minSmall =
-          seg.durationMs < 8 * 60 * 60 * 1000
-            ? 3 * 60 * 60 * 1000
-            : 2 * 60 * 60 * 1000;
-        if (pendingSmall.durationMs >= minSmall) return seg.endTs;
-        else {
-          pendingBig = { index: i, durationMs: seg.durationMs };
-          pendingSmall = null;
-        }
-      } else {
-        pendingBig = { index: i, durationMs: seg.durationMs };
-      }
-      continue;
-    }
-
-    if (isSmall) {
-      if (pendingBig !== null) {
-        const minSmall =
-          pendingBig.durationMs < 8 * 60 * 60 * 1000
-            ? 3 * 60 * 60 * 1000
-            : 2 * 60 * 60 * 1000;
-        if (seg.durationMs >= minSmall) return seg.endTs;
-        else {
-          pendingSmall = { index: i, durationMs: seg.durationMs };
-          pendingBig = null;
-        }
-      } else {
-        pendingSmall = { index: i, durationMs: seg.durationMs };
-      }
-      continue;
-    }
-  }
-
-  return null;
-}
-
+const f = (ts: number | null | undefined) => (ts == null ? "-" : fmt(ts));
 function isCycleResetRest(seg: Segment) {
   return seg.status === "DS_OFF" || seg.status === "DS_SB";
 }
@@ -380,112 +330,64 @@ function checkCycleViolations(cycleStates: CycleState[], segments: Segment[]) {
   return violations;
 }
 
-function isValidSplit(
-  big: { durationMs: number; endTs: number },
-  small: { durationMs: number; endTs: number },
-) {
-  const bigOk = big.durationMs >= 7 * 60 * 60 * 1000;
-
-  const smallOk = small.durationMs >= 2 * 60 * 60 * 1000;
-
-  return bigOk && smallOk && big.durationMs + small.durationMs >= TEN_HOURS_MS;
-}
-
 export type Violation = {
   rule: "70h" | "14h" | "11h" | "30min";
   startTs: number;
   endTs: number | null;
-
   anchorTs?: number;
 };
+
 type RestCandidate = {
   startTs: number;
   endTs: number;
   durationMs: number;
 };
 
-type ClockWindow = {
-  anchorTs: number;
-  excludedRest: RestCandidate | null;
-};
-
-type EngineState = {
+type ClockState = {
   clockWindow: ClockWindow | null;
-
-  pendingBig: RestCandidate | null;
-  pendingSmall: RestCandidate | null;
-
+  hadReset: boolean;
   driveMs30: number;
   breakMs: number;
-
-  consecutiveRestMs: number;
-  hadReset: boolean;
-
-  last14ViolationAnchorTs: number | null;
-
   violations: Violation[];
 };
 
-function initialState(): EngineState {
+type RestInfo = {
+  startIndex: number;
+  endIndex: number;
+  startTs: number;
+  endTs: number;
+  durationMs: number;
+
+  isFullReset: boolean;
+  isBig: boolean;
+  isSmall: boolean;
+
+  excludedFrom14h: boolean;
+  anchorAfterThisRestTs: number | null;
+};
+
+const isSleeper = (segment: Segment) => segment.status === "DS_SB";
+
+function initialClockState(): ClockState {
   return {
     clockWindow: null,
-
-    pendingBig: null,
-    pendingSmall: null,
-
+    hadReset: false,
     driveMs30: 0,
     breakMs: 0,
-
-    consecutiveRestMs: 0,
-    hadReset: false,
-
-    last14ViolationAnchorTs: null,
-
     violations: [],
   };
-}
-
-function getFullResetStartTs(
-  segments: Segment[],
-  fromIndex: number,
-): number | null {
-  let consecutiveRestMs = 0;
-  let restBlockStartTs: number | null = null;
-
-  for (let i = fromIndex; i < segments.length; i++) {
-    const seg = segments[i];
-    const isRest = seg.status === "DS_SB" || seg.status === "DS_OFF";
-
-    if (isRest) {
-      if (restBlockStartTs === null) {
-        restBlockStartTs = seg.startTs;
-      }
-
-      consecutiveRestMs += seg.durationMs;
-
-      if (consecutiveRestMs >= TEN_HOURS_MS) {
-        return restBlockStartTs;
-      }
-    } else {
-      consecutiveRestMs = 0;
-      restBlockStartTs = null;
-    }
-  }
-
-  return null;
 }
 
 function getExcludedMs(
   anchorTs: number,
   nowTs: number,
-  excludedRest: RestCandidate | null,
+  excludedRests: RestCandidate[],
 ) {
-  if (!excludedRest) return 0;
-
-  const from = Math.max(anchorTs, excludedRest.startTs);
-  const to = Math.min(nowTs, excludedRest.endTs);
-
-  return Math.max(0, to - from);
+  return excludedRests.reduce((total, rest) => {
+    const from = Math.max(anchorTs, rest.startTs);
+    const to = Math.min(nowTs, rest.endTs);
+    return total + Math.max(0, to - from);
+  }, 0);
 }
 
 function sumDrivingSince(segments: Segment[], fromTs: number, toTs: number) {
@@ -505,349 +407,199 @@ function sumDrivingSince(segments: Segment[], fromTs: number, toTs: number) {
   return total;
 }
 
-function removeClockViolationsForAnchor(
+function hasViolation(
   violations: Violation[],
-  anchorTs: number | null,
+  rule: Violation["rule"],
+  anchorTs?: number,
 ) {
-  if (anchorTs === null) return violations;
-
-  return violations.filter((v) => {
-    if (v.rule !== "11h" && v.rule !== "14h") return true;
-    return v.anchorTs !== anchorTs;
-  });
+  return violations.some((v) => v.rule === rule && v.anchorTs === anchorTs);
 }
 
-function checkClockWindowViolations({
-  segments,
-  fromTs,
-  toTs,
-  anchorTs,
-  excludedRest,
-  endTs,
-}: {
-  segments: Segment[];
-  fromTs: number;
-  toTs: number;
-  anchorTs: number;
-  excludedRest: RestCandidate | null;
-  endTs: number | null;
-}): Violation[] {
-  const violations: Violation[] = [];
+function findAllRests(segments: Segment[]): RestInfo[] {
+  const rests: RestInfo[] = [];
 
-  let driveMs = 0;
-  let has11 = false;
-  let has14 = false;
+  let startIndex: number | null = null;
+  let durationMs = 0;
+  let sleeperMs = 0;
+  let longestSleeperMs = 0;
 
-  for (const seg of segments) {
-    if (seg.endTs <= fromTs) continue;
-    if (seg.startTs >= toTs) break;
-
-    const from = Math.max(seg.startTs, fromTs);
-    const to = Math.min(seg.endTs, toTs);
-    const durationMs = to - from;
-
-    if (durationMs <= 0) continue;
-
-    if (isOnDuty(seg) && !has14) {
-      const excludedMs = getExcludedMs(anchorTs, to, excludedRest);
-      const shiftUsedMs = to - anchorTs - excludedMs;
-
-      if (shiftUsedMs >= FOURTEEN_HOURS_MS) {
-        violations.push({
-          rule: "14h",
-          startTs: anchorTs + excludedMs + FOURTEEN_HOURS_MS,
-          endTs,
-          anchorTs,
-        });
-
-        has14 = true;
-      }
-    }
-
-    if (isDriving(seg) && !has11) {
-      const prevDriveMs = driveMs;
-      driveMs += durationMs;
-
-      if (prevDriveMs < ELEVEN_HOURS_MS && driveMs >= ELEVEN_HOURS_MS) {
-        violations.push({
-          rule: "11h",
-          startTs: from + (ELEVEN_HOURS_MS - prevDriveMs),
-          endTs,
-          anchorTs,
-        });
-
-        has11 = true;
-      }
-    }
-  }
-
-  return violations;
-}
-
-// TODO: differently typed, chained split recalculation
-// The engine currently doesnt support type 7 > 4 > 2 > 8+
-// TODO: apparently pairs of 7 into small split also doesnt exclude the small ?
-
-function completeSplitPair({
-  violations,
-  segments,
-  oldAnchorTs,
-  firstRest,
-  secondRest,
-}: {
-  violations: Violation[];
-  segments: Segment[];
-  oldAnchorTs: number | null;
-  firstRest: RestCandidate;
-  secondRest: RestCandidate;
-}) {
-  let nextViolations = removeClockViolationsForAnchor(violations, oldAnchorTs);
-
-  if (oldAnchorTs === null) return nextViolations;
-  const resolvedTs = getFullResetStartTs(
-    segments,
-    segments.findIndex((s) => s.startTs === secondRest.startTs) + 1,
-  );
-
-  const oldWindow = checkClockWindowViolations({
-    segments,
-    fromTs: oldAnchorTs,
-    toTs: secondRest.startTs,
-    anchorTs: oldAnchorTs,
-    excludedRest: firstRest,
-    endTs: resolvedTs,
-  });
-
-  const splitWindow = checkClockWindowViolations({
-    segments,
-    fromTs: firstRest.endTs,
-    toTs: secondRest.startTs,
-    anchorTs: firstRest.endTs,
-    excludedRest: null,
-    endTs: resolvedTs,
-  });
-
-  return [...nextViolations, ...oldWindow, ...splitWindow];
-}
-
-function processSegment(
-  state: EngineState,
-  seg: Segment,
-  segments: Segment[],
-  segIndex: number,
-): EngineState {
-  let {
-    clockWindow,
-    pendingBig,
-    pendingSmall,
-    driveMs30,
-    breakMs,
-    consecutiveRestMs,
-    hadReset,
-    last14ViolationAnchorTs,
-    violations,
-  } = state;
-
-  const isRest = seg.status === "DS_SB" || seg.status === "DS_OFF";
-
-  const isSplitBig =
-    seg.status === "DS_SB" && seg.durationMs >= 7 * 60 * 60 * 1000;
-
-  const isSplitSmall =
-    isRest &&
-    seg.durationMs >= 2 * 60 * 60 * 1000 &&
-    seg.durationMs < 7 * 60 * 60 * 1000;
-
-  const currentRest = {
-    startTs: seg.startTs,
-    endTs: seg.endTs,
-    durationMs: seg.durationMs,
+  const reset = () => {
+    startIndex = null;
+    durationMs = 0;
+    sleeperMs = 0;
+    longestSleeperMs = 0;
   };
 
-  // LOGGING
-  // const f = (ts: number | null | undefined) =>
-  //   ts ? DateTime.fromMillis(ts).toFormat("MM/dd HH:mm:ss") : null;
+  const finishRest = (endIndex: number) => {
+    if (startIndex === null) return;
 
-  // const h = (ms: number | null | undefined) =>
-  //   ms == null
-  //     ? null
-  //     : `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+    const startSeg = segments[startIndex];
+    const endSeg = segments[endIndex];
 
-  // const driveUsed =
-  //   clockWindow !== null
-  //     ? sumDrivingSince(segments, clockWindow.anchorTs, seg.endTs)
-  //     : 0;
+    const isFullReset = durationMs >= TEN_HOURS_MS;
+    const isBig = longestSleeperMs >= SEVEN_HOURS_MS;
+    const isSmall = durationMs >= TWO_HOURS_MS;
 
-  // const excludedUsed =
-  //   clockWindow !== null
-  //     ? getExcludedMs(clockWindow.anchorTs, seg.endTs, clockWindow.excludedRest)
-  //     : 0;
+    if (!isFullReset && !isBig && !isSmall) {
+      reset();
+      return;
+    }
 
-  // const shiftUsed =
-  //   clockWindow !== null ? seg.endTs - clockWindow.anchorTs - excludedUsed : 0;
+    rests.push({
+      startIndex,
+      endIndex,
+      startTs: startSeg.startTs,
+      endTs: endSeg.endTs,
+      durationMs,
 
-  // console.table({
-  //   i: segIndex,
-  //   status: seg.status,
-  //   start: f(seg.startTs),
-  //   end: f(seg.endTs),
-  //   dur: h(seg.durationMs),
+      isFullReset,
+      isBig,
+      isSmall,
 
-  //   isRest,
-  //   isSplitBig,
-  //   isSplitSmall,
+      excludedFrom14h: false,
+      anchorAfterThisRestTs: null,
+    });
 
-  //   anchor: f(clockWindow?.anchorTs),
-  //   excludedRestStart: f(clockWindow?.excludedRest?.startTs),
-  //   excludedRestEnd: f(clockWindow?.excludedRest?.endTs),
-  //   excludedUsed: h(excludedUsed),
+    reset();
+  };
 
-  //   pendingBigEnd: f(pendingBig?.endTs),
-  //   pendingBigDur: h(pendingBig?.durationMs),
-  //   pendingSmallEnd: f(pendingSmall?.endTs),
-  //   pendingSmallDur: h(pendingSmall?.durationMs),
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
 
-  //   shiftUsed: h(shiftUsed),
-  //   shiftRemaining: h(FOURTEEN_HOURS_MS - shiftUsed),
+    if (isRest(seg)) {
+      if (startIndex === null) startIndex = i;
 
-  //   driveUsed: h(driveUsed),
-  //   driveRemaining: h(ELEVEN_HOURS_MS - driveUsed),
+      durationMs += seg.durationMs;
 
-  //   driveMs30: h(driveMs30),
-  //   breakMs: h(breakMs),
+      if (isSleeper(seg)) {
+        sleeperMs += seg.durationMs;
+        longestSleeperMs = Math.max(longestSleeperMs, sleeperMs);
+      } else {
+        sleeperMs = 0;
+      }
 
-  //   consecutiveRestMs: h(consecutiveRestMs),
-  //   hadReset,
+      continue;
+    }
 
-  //   violations: violations.map((v) => ({
-  //     rule: v.rule,
-  //     start: f(v.startTs),
-  //     end: f(v.endTs),
-  //   })),
-  // });
+    finishRest(i - 1);
+  }
 
-  if (isSplitBig) {
-    if (pendingSmall !== null && isValidSplit(currentRest, pendingSmall)) {
-      const oldAnchorTs = clockWindow?.anchorTs ?? null;
+  finishRest(segments.length - 1);
 
-      violations = completeSplitPair({
-        violations,
-        segments,
-        oldAnchorTs,
-        firstRest: pendingSmall,
-        secondRest: currentRest,
-      });
+  return rests;
+}
 
-      clockWindow = {
-        anchorTs: pendingSmall.endTs,
-        excludedRest: currentRest,
-      };
+function isValidSplitPair(first: RestInfo, second: RestInfo) {
+  return (
+    first.isSmall &&
+    second.isSmall &&
+    first.durationMs + second.durationMs >= TEN_HOURS_MS &&
+    (first.isBig || second.isBig)
+  );
+}
 
-      pendingSmall = null;
-      pendingBig = currentRest;
-      last14ViolationAnchorTs = null;
-    } else if (pendingBig !== null) {
-      const oldAnchorTs = clockWindow?.anchorTs ?? null;
+function annotateSplitPairs(rests: RestInfo[]): RestInfo[] {
+  const next = rests.map((r) => ({ ...r }));
 
-      violations = completeSplitPair({
-        violations,
-        segments,
-        oldAnchorTs,
-        firstRest: pendingBig,
-        secondRest: currentRest,
-      });
+  let pendingIndex: number | null = null;
 
-      clockWindow = {
-        anchorTs: pendingBig.endTs,
-        excludedRest: currentRest,
-      };
+  for (let i = 0; i < next.length; i++) {
+    const current = next[i];
 
-      pendingBig = currentRest;
-      last14ViolationAnchorTs = null;
-    } else {
-      pendingBig = currentRest;
+    if (pendingIndex !== null) {
+      const pending = next[pendingIndex];
 
-      if (clockWindow !== null) {
-        clockWindow = {
-          ...clockWindow,
-          excludedRest: currentRest,
-        };
+      if (isValidSplitPair(pending, current)) {
+        pending.excludedFrom14h = true;
+        current.excludedFrom14h = true;
+        current.anchorAfterThisRestTs = pending.endTs;
+
+        pendingIndex = current.isFullReset ? null : i;
+        continue;
       }
     }
-  }
 
-  if (isSplitSmall) {
-    // console.log("SPLIT: small detected", {
-    //   start: f(currentRest.startTs),
-    //   end: f(currentRest.endTs),
-    //   dur: h(currentRest.durationMs),
-    //   pendingBig,
-    // });
-    if (pendingBig !== null && isValidSplit(pendingBig, currentRest)) {
-      // console.log("SPLIT: valid pair, big first / small second", {
-      //   newAnchor: f(pendingBig.endTs),
-      //   excludedRest: null,
-      // });
-      const oldAnchorTs = clockWindow?.anchorTs ?? null;
+    if (current.isFullReset) {
+      pendingIndex = null;
+      continue;
+    }
 
-      violations = completeSplitPair({
-        violations,
-        segments,
-        oldAnchorTs,
-        firstRest: pendingBig,
-        secondRest: currentRest,
-      });
+    if (current.isBig) {
+      current.excludedFrom14h = true;
+    }
 
-      clockWindow = {
-        anchorTs: pendingBig.endTs,
-        excludedRest: currentRest,
-      };
-
-      pendingBig = null;
-      pendingSmall = currentRest;
-      last14ViolationAnchorTs = null;
-    } else {
-      pendingSmall = currentRest;
+    if (current.isBig || current.isSmall) {
+      pendingIndex = i;
     }
   }
 
-  if (isRest) {
-    consecutiveRestMs += seg.durationMs;
+  return next;
+}
 
-    if (consecutiveRestMs >= TEN_HOURS_MS) {
-      hadReset = true;
+type ClockWindow = {
+  anchorTs: number;
+  excludedRests: RestCandidate[];
+};
 
+function processSegment(
+  state: ClockState,
+  seg: Segment,
+  segments: Segment[],
+  rests: RestInfo[],
+  index: number,
+): ClockState {
+  const restByStartIndex = new Map(rests.map((r) => [r.startIndex, r]));
+  const restInfo = restByStartIndex.get(index);
+  const nextRestStartTs = getNextFullResetStartTs(rests, seg.startTs);
+  let { clockWindow, hadReset, driveMs30, breakMs, violations } = state;
+
+  if (restInfo) {
+    const restCandidate: RestCandidate = {
+      startTs: restInfo.startTs,
+      endTs: restInfo.endTs,
+      durationMs: restInfo.durationMs,
+    };
+
+    if (restInfo.excludedFrom14h && clockWindow) {
+      clockWindow = {
+        ...clockWindow,
+        excludedRests: [...clockWindow.excludedRests, restCandidate],
+      };
+    }
+
+    if (restInfo.anchorAfterThisRestTs) {
+      clockWindow = {
+        anchorTs: restInfo.anchorAfterThisRestTs,
+        excludedRests: [restCandidate],
+      };
+    }
+
+    if (restInfo.isFullReset) {
       clockWindow = null;
-      pendingBig = null;
-      pendingSmall = null;
-
+      hadReset = true;
       driveMs30 = 0;
       breakMs = 0;
-
-      last14ViolationAnchorTs = null;
     }
-  } else {
-    consecutiveRestMs = 0;
+  }
 
+  if (!isRest(seg)) {
     if (hadReset) {
       clockWindow = {
         anchorTs: seg.startTs,
-        excludedRest: null,
+        excludedRests: [],
       };
-
       hadReset = false;
-      last14ViolationAnchorTs = null;
     }
 
     if (clockWindow === null && isOnDuty(seg)) {
       clockWindow = {
         anchorTs: seg.startTs,
-        excludedRest: null,
+        excludedRests: [],
       };
     }
   }
 
-  if (isRest || seg.status === "DS_ON") {
+  if (isRest(seg) || seg.status === "DS_ON") {
     breakMs += seg.durationMs;
 
     if (breakMs >= THIRTY_MIN_MS) {
@@ -858,63 +610,42 @@ function processSegment(
     driveMs30 += seg.durationMs;
   }
 
-  if (clockWindow !== null && isOnDuty(seg)) {
-    const prevExcludedMs = getExcludedMs(
+  if (clockWindow && isDriving(seg)) {
+    const excludedAtStart = getExcludedMs(
       clockWindow.anchorTs,
       seg.startTs,
-      clockWindow.excludedRest,
+      clockWindow.excludedRests,
     );
 
-    const prevShiftUsedMs = seg.startTs - clockWindow.anchorTs - prevExcludedMs;
-
-    const excludedMs = getExcludedMs(
+    const excludedAtEnd = getExcludedMs(
       clockWindow.anchorTs,
       seg.endTs,
-      clockWindow.excludedRest,
+      clockWindow.excludedRests,
     );
 
-    const shiftUsedMs = seg.endTs - clockWindow.anchorTs - excludedMs;
+    const shiftUsedAtStart =
+      seg.startTs - clockWindow.anchorTs - excludedAtStart;
 
-    if (
-      prevShiftUsedMs < FOURTEEN_HOURS_MS &&
-      shiftUsedMs >= FOURTEEN_HOURS_MS &&
-      last14ViolationAnchorTs !== clockWindow.anchorTs
-    ) {
-      const msNeeded = FOURTEEN_HOURS_MS - prevShiftUsedMs;
+    const shiftUsedAtEnd = seg.endTs - clockWindow.anchorTs - excludedAtEnd;
 
-      violations = [
-        ...violations,
-        {
-          rule: "14h",
-          startTs: seg.startTs + msNeeded,
-          endTs: getFullResetStartTs(segments, segIndex + 1),
-          anchorTs: clockWindow.anchorTs,
-        },
-      ];
-
-      last14ViolationAnchorTs = clockWindow.anchorTs;
-    }
-  }
-
-  if (clockWindow !== null && isDriving(seg)) {
-    const driveMs = sumDrivingSince(segments, clockWindow.anchorTs, seg.endTs);
-
-    if (driveMs >= ELEVEN_HOURS_MS) {
-      const prevDriveMs = sumDrivingSince(
-        segments,
-        clockWindow.anchorTs,
-        seg.startTs,
-      );
-
-      if (prevDriveMs < ELEVEN_HOURS_MS) {
-        const msNeeded = ELEVEN_HOURS_MS - prevDriveMs;
-
+    if (!hasViolation(violations, "14h", clockWindow.anchorTs)) {
+      if (shiftUsedAtStart >= FOURTEEN_HOURS_MS) {
         violations = [
           ...violations,
           {
-            rule: "11h",
-            startTs: seg.startTs + msNeeded,
-            endTs: getFullResetStartTs(segments, segIndex + 1),
+            rule: "14h",
+            startTs: seg.startTs,
+            endTs: nextRestStartTs,
+            anchorTs: clockWindow.anchorTs,
+          },
+        ];
+      } else if (shiftUsedAtEnd >= FOURTEEN_HOURS_MS) {
+        violations = [
+          ...violations,
+          {
+            rule: "14h",
+            startTs: seg.startTs + (FOURTEEN_HOURS_MS - shiftUsedAtStart),
+            endTs: nextRestStartTs,
             anchorTs: clockWindow.anchorTs,
           },
         ];
@@ -922,18 +653,42 @@ function processSegment(
     }
   }
 
-  if (isDriving(seg) && driveMs30 >= EIGHT_HOURS_MS) {
+  if (clockWindow && isDriving(seg)) {
+    const prevDriveMs = sumDrivingSince(
+      segments,
+      clockWindow.anchorTs,
+      seg.startTs,
+    );
+
+    const nextDriveMs = prevDriveMs + seg.durationMs;
+
+    if (
+      prevDriveMs < ELEVEN_HOURS_MS &&
+      nextDriveMs >= ELEVEN_HOURS_MS &&
+      !hasViolation(violations, "11h", clockWindow.anchorTs)
+    ) {
+      violations = [
+        ...violations,
+        {
+          rule: "11h",
+          startTs: seg.startTs + (ELEVEN_HOURS_MS - prevDriveMs),
+          endTs: nextRestStartTs,
+          anchorTs: clockWindow.anchorTs,
+        },
+      ];
+    }
+  }
+
+  if (isDriving(seg)) {
     const prevDriveMs30 = driveMs30 - seg.durationMs;
 
-    if (prevDriveMs30 < EIGHT_HOURS_MS) {
-      const msNeeded = EIGHT_HOURS_MS - prevDriveMs30;
-
+    if (prevDriveMs30 < EIGHT_HOURS_MS && driveMs30 >= EIGHT_HOURS_MS) {
       violations = [
         ...violations,
         {
           rule: "30min",
-          startTs: seg.startTs + msNeeded,
-          endTs: getFullResetStartTs(segments, segIndex + 1),
+          startTs: seg.startTs + (EIGHT_HOURS_MS - prevDriveMs30),
+          endTs: nextRestStartTs,
         },
       ];
     }
@@ -941,38 +696,50 @@ function processSegment(
 
   return {
     clockWindow,
-    pendingBig,
-    pendingSmall,
+    hadReset,
     driveMs30,
     breakMs,
-    consecutiveRestMs,
-    hadReset,
-    last14ViolationAnchorTs,
     violations,
   };
 }
 
-export function runEngine(events: HosEvent[]) {
-  const segments = buildSegments(events);
+export function runEngine(segments: Segment[], rests: RestInfo[]) {
+  let state = initialClockState();
 
-  if (segments.length === 0) {
-    return {
-      shiftState: { usedMs: 0, remainingMs: FOURTEEN_HOURS_MS },
-      driveState: { usedMs: 0, remainingMs: ELEVEN_HOURS_MS },
-      breakState: { usedMs: 0, remainingMs: EIGHT_HOURS_MS },
-      violations: [],
-    };
-  }
-
-  let state = initialState();
   for (let i = 0; i < segments.length; i++) {
-    state = processSegment(state, segments[i], segments, i);
+    state = processSegment(state, segments[i], segments, rests, i);
+    // const excludedMs = state.clockWindow
+    //   ? getExcludedMs(
+    //       state.clockWindow.anchorTs,
+    //       segments[i].endTs,
+    //       state.clockWindow.excludedRests,
+    //     )
+    //   : 0;
+
+    // const shiftUsedMs = state.clockWindow
+    //   ? segments[i].endTs - state.clockWindow.anchorTs - excludedMs
+    //   : 0;
+
+    // const driveUsedMs = state.clockWindow
+    //   ? sumDrivingSince(segments, state.clockWindow.anchorTs, segments[i].endTs)
+    //   : 0;
+
+    // console.table([
+    //   {
+    //     i,
+    //     status: segments[i].status,
+    //     shiftUsed: h(shiftUsedMs),
+    //     driveUsed: h(driveUsedMs),
+    //     excluded: h(excludedMs),
+    //     anchor: state.clockWindow ? fmt(state.clockWindow.anchorTs) : "-",
+    //   },
+    // ]);
   }
 
-  const lastSeg = segments.at(-1)!;
+  const lastSeg = segments.at(-1);
 
   const shiftUsedMs =
-    state.clockWindow !== null
+    lastSeg && state.clockWindow
       ? Math.max(
           0,
           lastSeg.endTs -
@@ -980,13 +747,13 @@ export function runEngine(events: HosEvent[]) {
             getExcludedMs(
               state.clockWindow.anchorTs,
               lastSeg.endTs,
-              state.clockWindow.excludedRest,
+              state.clockWindow.excludedRests,
             ),
         )
       : 0;
 
   const driveUsedMs =
-    state.clockWindow !== null
+    lastSeg && state.clockWindow
       ? sumDrivingSince(segments, state.clockWindow.anchorTs, lastSeg.endTs)
       : 0;
 
@@ -1009,9 +776,36 @@ export function runEngine(events: HosEvent[]) {
 
 export function hosEngine(events: HosEvent[]) {
   const segments = buildSegments(events);
+  const rests = annotateSplitPairs(findAllRests(segments));
+  //   console.table(
+  //     rests.map((r, i) => ({
+  //       i,
+  //       hours: (r.durationMs / 3600000).toFixed(2),
+  //       big: r.isBig,
+  //       small: r.isSmall,
+  //       excluded: r.excludedFrom14h,
+  //       anchorAfter: r.anchorAfterThisRestTs ? fmt(r.anchorAfterThisRestTs) : "-",
+  //     })),
+  //   );
+  //   console.table(
+  //     rests.map((r, i) => ({
+  //       i,
+  //       startIndex: r.startIndex,
+  //       endIndex: r.endIndex,
+  //       start: fmt(r.startTs),
+  //       end: fmt(r.endTs),
+  //       hours: (r.durationMs / 3600000).toFixed(2),
+  //       reset: r.isFullReset,
+  //       big: r.isBig,
+  //       small: r.isSmall,
+  //       excluded: r.excludedFrom14h,
+  //       anchorAfter: r.anchorAfterThisRestTs ? fmt(r.anchorAfterThisRestTs) : "-",
+  //     })),
+  //   );
   const cycleStates = buildCycleStates(segments);
-  const { violations, ...result } = runEngine(events);
+  const { violations, ...result } = runEngine(segments, rests);
   const cycleViolations = checkCycleViolations(cycleStates, segments);
+
   return {
     clocks: {
       ...result,
