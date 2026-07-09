@@ -11,6 +11,8 @@ import type { HosEvent } from "@/lib/types";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
+import { useAppClipboardStore } from "@/lib/store/useAppClipboard";
+import { toast } from "sonner";
 
 type LocationProps = {
   event: HosEvent;
@@ -19,6 +21,9 @@ type LocationProps = {
 
 export const Location = ({ event, isLocationError }: LocationProps) => {
   const { updateEvent } = useTransactionContext();
+  const { canPasteLocation, copyLocation, resolveLocation } =
+    useAppClipboardStore((s) => s);
+
   const disabled = event.i;
   return (
     <ContextMenu>
@@ -69,8 +74,7 @@ export const Location = ({ event, isLocationError }: LocationProps) => {
         <ContextMenuItem
           disabled={!event.location}
           onClick={() => {
-            if (!event.location) return;
-            navigator.clipboard.writeText(JSON.stringify(event.location));
+            copyLocation(event.location);
           }}
         >
           Copy location
@@ -78,36 +82,24 @@ export const Location = ({ event, isLocationError }: LocationProps) => {
 
         <ContextMenuItem
           onClick={async () => {
-            const text = await navigator.clipboard.readText();
-
-            try {
-              const location = JSON.parse(text);
-
+            const location = await resolveLocation();
+            if (location) {
               updateEvent(event._id, (prev) => ({
                 ...prev,
-                location,
+                location: {
+                  ...prev.location,
+                  ...location,
+                  source: prev.location?.source ?? "E",
+                  timestamp:
+                    prev.location?.timestamp ?? event.eventTime.timestamp,
+                },
               }));
-            } catch {
-              console.error(
-                "Clipboard does not contain a valid location object.",
-              );
+            } else {
+              toast.error("Couldn't generate a location.");
             }
           }}
         >
           Paste location
-        </ContextMenuItem>
-
-        <ContextMenuItem
-          disabled={!event.location}
-          onClick={() => {
-            if (!event.location) return;
-
-            navigator.clipboard.writeText(
-              `${event.location.lat},${event.location.lon}`,
-            );
-          }}
-        >
-          Copy coordinates
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

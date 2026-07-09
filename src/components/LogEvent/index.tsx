@@ -229,7 +229,7 @@ const LogEvent = ({
       <TableCell className="text-muted-foreground flex max-w-[400px] gap-4">
         <Location isLocationError={isLocationError} event={event} />
         {knownLocation && (
-          <Badge className="shadow-sm">{knownLocation.location.type}</Badge>
+          <Badge variant="outline">{knownLocation.location.type}</Badge>
         )}
       </TableCell>
       <TableCell>

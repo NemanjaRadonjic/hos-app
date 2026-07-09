@@ -120,7 +120,7 @@ export function getCalculatedLocationData(lat: number, lon: number) {
     };
   }
 
-  const direction = bearingDirection(lat, lon, city.lat, city.lon);
+  const direction = bearingDirection(city.lat, city.lon, lat, lon);
 
   return {
     calculatedLocation: `${miles}mi ${direction} from ${city.name}, ${city.state}`,

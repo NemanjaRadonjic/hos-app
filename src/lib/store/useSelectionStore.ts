@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { HosEvent } from "@/lib/types";
 import type { DateTime } from "luxon";
 import { devtools } from "zustand/middleware";
+
 type SliderSelection = {
   start: number;
   end: number;

@@ -498,38 +498,49 @@ function isValidSplitPair(first: RestInfo, second: RestInfo) {
   );
 }
 
+function findPreviousSplitPairIndex(rests: RestInfo[], currentIndex: number) {
+  const current = rests[currentIndex];
+
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const prev = rests[i];
+
+    if (prev.isFullReset) break;
+
+    if (isValidSplitPair(prev, current)) {
+      return i;
+    }
+  }
+
+  return null;
+}
+
 function annotateSplitPairs(rests: RestInfo[]): RestInfo[] {
   const next = rests.map((r) => ({ ...r }));
-
-  let pendingIndex: number | null = null;
 
   for (let i = 0; i < next.length; i++) {
     const current = next[i];
 
-    if (pendingIndex !== null) {
-      const pending = next[pendingIndex];
+    const pairIndex = findPreviousSplitPairIndex(next, i);
 
-      if (isValidSplitPair(pending, current)) {
-        pending.excludedFrom14h = true;
-        current.excludedFrom14h = true;
-        current.anchorAfterThisRestTs = pending.endTs;
+    if (pairIndex !== null) {
+      const previous = next[pairIndex];
 
-        pendingIndex = current.isFullReset ? null : i;
-        continue;
+      previous.excludedFrom14h = true;
+      current.excludedFrom14h = true;
+
+      if (!current.isFullReset) {
+        current.anchorAfterThisRestTs = previous.endTs;
       }
+
+      continue;
     }
 
     if (current.isFullReset) {
-      pendingIndex = null;
       continue;
     }
 
     if (current.isBig) {
       current.excludedFrom14h = true;
-    }
-
-    if (current.isBig || current.isSmall) {
-      pendingIndex = i;
     }
   }
 
@@ -560,17 +571,15 @@ function processSegment(
       durationMs: restInfo.durationMs,
     };
 
-    if (restInfo.excludedFrom14h && clockWindow) {
-      clockWindow = {
-        ...clockWindow,
-        excludedRests: [...clockWindow.excludedRests, restCandidate],
-      };
-    }
-
     if (restInfo.anchorAfterThisRestTs) {
       clockWindow = {
         anchorTs: restInfo.anchorAfterThisRestTs,
-        excludedRests: [restCandidate],
+        excludedRests: [...(clockWindow?.excludedRests ?? []), restCandidate],
+      };
+    } else if (restInfo.excludedFrom14h && clockWindow) {
+      clockWindow = {
+        ...clockWindow,
+        excludedRests: [...clockWindow.excludedRests, restCandidate],
       };
     }
 
@@ -777,16 +786,16 @@ export function runEngine(segments: Segment[], rests: RestInfo[]) {
 export function hosEngine(events: HosEvent[]) {
   const segments = buildSegments(events);
   const rests = annotateSplitPairs(findAllRests(segments));
-  //   console.table(
-  //     rests.map((r, i) => ({
-  //       i,
-  //       hours: (r.durationMs / 3600000).toFixed(2),
-  //       big: r.isBig,
-  //       small: r.isSmall,
-  //       excluded: r.excludedFrom14h,
-  //       anchorAfter: r.anchorAfterThisRestTs ? fmt(r.anchorAfterThisRestTs) : "-",
-  //     })),
-  //   );
+  // console.table(
+  //   rests.map((r, i) => ({
+  //     i,
+  //     hours: (r.durationMs / 3600000).toFixed(2),
+  //     big: r.isBig,
+  //     small: r.isSmall,
+  //     excluded: r.excludedFrom14h,
+  //     anchorAfter: r.anchorAfterThisRestTs ? fmt(r.anchorAfterThisRestTs) : "-",
+  //   })),
+  // );
   //   console.table(
   //     rests.map((r, i) => ({
   //       i,
