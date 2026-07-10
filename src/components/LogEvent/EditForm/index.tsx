@@ -214,8 +214,12 @@ export function EditEventModal({
   const updateLocation = (
     patch: NonNullable<Partial<HosEvent["location"]>>,
   ) => {
-    const lat = patch.lat ?? draft.event.location?.lat ?? 0;
-    const lon = patch.lon ?? draft.event.location?.lon ?? 0;
+    const lat = patch.lat ?? draft.event.location?.lat;
+    const lon = patch.lon ?? draft.event.location?.lon;
+
+    if (lat == null || lon == null) return;
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
 
     const { calculatedLocation, state } = getCalculatedLocationData(lat, lon);
 
@@ -230,6 +234,50 @@ export function EditEventModal({
           draft.event.location?.timestamp ?? draft.event.eventTime.timestamp,
       },
     });
+  };
+
+  const parseCoordinates = (text: string) => {
+    const normalized = text.trim().replace(/[()]/g, "");
+
+    const parts = normalized
+      .split(/[,\s]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length !== 2) return null;
+
+    const lat = Number(parts[0]);
+    const lon = Number(parts[1]);
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
+    ) {
+      return null;
+    }
+
+    return { lat, lon };
+  };
+
+  const handleCoordinatesPaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+  ) => {
+    const parsed = parseCoordinates(e.clipboardData.getData("text"));
+
+    if (!parsed) return;
+
+    e.preventDefault();
+
+    setFormState({
+      lat: String(parsed.lat),
+      lon: String(parsed.lon),
+    });
+
+    updateLocation(parsed);
   };
 
   const updateDraft = (
@@ -597,12 +645,16 @@ export function EditEventModal({
               }
               onKeyDown={(e) => e.stopPropagation()}
               value={draft.event.location ? formState.lat : ""}
+              onPaste={handleCoordinatesPaste}
               onChange={(e) => {
                 const value = e.target.value;
-                setFormState((s) => ({ ...s, lat: value }));
+                setFormState((state) => ({ ...state, lat: value }));
+
+                if (value.trim() === "") return;
 
                 const lat = Number(value);
-                if (!Number.isFinite(lat)) return;
+
+                if (!Number.isFinite(lat) || lat < -90 || lat > 90) return;
 
                 updateLocation({ lat });
               }}
@@ -618,12 +670,16 @@ export function EditEventModal({
               }
               onKeyDown={(e) => e.stopPropagation()}
               value={draft.event.location ? formState.lon : ""}
+              onPaste={handleCoordinatesPaste}
               onChange={(e) => {
                 const value = e.target.value;
-                setFormState((s) => ({ ...s, lon: value }));
+                setFormState((state) => ({ ...state, lon: value }));
+
+                if (value.trim() === "") return;
 
                 const lon = Number(value);
-                if (!Number.isFinite(lon)) return;
+
+                if (!Number.isFinite(lon) || lon < -180 || lon > 180) return;
 
                 updateLocation({ lon });
               }}

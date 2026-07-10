@@ -18,10 +18,13 @@ import {
   TableRow,
 } from "./ui/table";
 import { EVENT_CODE_MAP } from "@/lib/maps";
-import { HosGauge } from "./hos-gauge";
-import type { DriverTableData } from "@/routes";
+import { msToHHMM } from "./hos-gauge";
 import "@tanstack/react-table";
 import type { DriverSimplified } from "@/lib/hooks/useDriversData";
+import { MdSignalWifi4Bar, MdSignalWifiBad } from "react-icons/md";
+import { DateTime } from "luxon";
+import { formatTimestampEvent } from "./LogEvent";
+import { checkKnownLocation } from "@/lib/helpers/check-known-location";
 
 declare module "@tanstack/react-table" {
   interface ColumnMeta<TData, TValue> {
@@ -61,7 +64,26 @@ const columns: ColumnDef<DriverSimplified>[] = [
   {
     header: "Location",
     accessorKey: "location",
-    cell: ({ row }) => row.getValue<string>("location"),
+    cell: ({ row }) => {
+      const location = row.original.location;
+
+      if (!location) {
+        return null;
+      }
+      const knownLocation = checkKnownLocation(row.original.location);
+      if (knownLocation) {
+        return (
+          <div className="flex gap-2">
+            {location.calculatedLocation}
+            {knownLocation && (
+              <Badge variant="outline">{knownLocation.location.type}</Badge>
+            )}
+          </div>
+        );
+      }
+
+      return location.calculatedLocation;
+    },
   },
   {
     header: "Break",
@@ -70,14 +92,16 @@ const columns: ColumnDef<DriverSimplified>[] = [
     },
     accessorFn: (row) =>
       row.breakTime.limitTime - row.breakTime.accumulatedTime,
-    cell: ({ row }) => (
-      <HosGauge
-        value={row.original.breakTime.accumulatedTime}
-        max={row.original.breakTime.limitTime}
-        label="Break"
-        color="var(--break)"
-      />
-    ),
+    cell: ({ row }) => {
+      const remaining = Math.max(
+        row.original.breakTime.limitTime -
+          row.original.breakTime.accumulatedTime,
+        0,
+      );
+      return (
+        <div className="text-center font-semibold">{msToHHMM(remaining)}</div>
+      );
+    },
   },
   {
     header: "Drive",
@@ -86,14 +110,16 @@ const columns: ColumnDef<DriverSimplified>[] = [
     },
     accessorFn: (row) =>
       row.driveTime.limitTime - row.driveTime.accumulatedTime,
-    cell: ({ row }) => (
-      <HosGauge
-        value={row.original.driveTime.accumulatedTime}
-        max={row.original.driveTime.limitTime}
-        label="Drive"
-        color="var(--hos-DS_D-bg)"
-      />
-    ),
+    cell: ({ row }) => {
+      const remaining = Math.max(
+        row.original.driveTime.limitTime -
+          row.original.driveTime.accumulatedTime,
+        0,
+      );
+      return (
+        <div className="text-center font-semibold">{msToHHMM(remaining)}</div>
+      );
+    },
   },
   {
     header: "Shift",
@@ -102,14 +128,16 @@ const columns: ColumnDef<DriverSimplified>[] = [
     },
     accessorFn: (row) =>
       row.shiftTime.limitTime - row.shiftTime.accumulatedTime,
-    cell: ({ row }) => (
-      <HosGauge
-        value={row.original.shiftTime.accumulatedTime}
-        max={row.original.shiftTime.limitTime}
-        label="Shift"
-        color="var(--hos-DS_ON-bg)"
-      />
-    ),
+    cell: ({ row }) => {
+      const remaining = Math.max(
+        row.original.shiftTime.limitTime -
+          row.original.shiftTime.accumulatedTime,
+        0,
+      );
+      return (
+        <div className="text-center font-semibold">{msToHHMM(remaining)}</div>
+      );
+    },
   },
   {
     header: "Cycle",
@@ -118,13 +146,53 @@ const columns: ColumnDef<DriverSimplified>[] = [
     },
     accessorFn: (row) =>
       row.cycleTime.limitTime - row.cycleTime.accumulatedTime,
+    cell: ({ row }) => {
+      const remaining = Math.max(
+        row.original.cycleTime.limitTime -
+          row.original.cycleTime.accumulatedTime,
+        0,
+      );
+      return (
+        <div className="text-center font-semibold">{msToHHMM(remaining)}</div>
+      );
+    },
+  },
+  {
+    header: "ELD",
+
+    accessorFn: (row) => row.isConnected,
+    meta: {
+      headerClassName: "text-center",
+      cellClassName: "flex justify-center",
+    },
+    cell: ({ row }) =>
+      row.original.isConnected ? (
+        <Badge
+          variant="success_filled"
+          className="flex items-center gap-2 shadow-sm"
+        >
+          <MdSignalWifi4Bar size={24} /> Connected
+        </Badge>
+      ) : (
+        <Badge variant="error_filled">
+          <MdSignalWifiBad
+            size={24}
+            className="flex items-center gap-2 shadow-sm"
+          />{" "}
+          Disconnected
+        </Badge>
+      ),
+  },
+  {
+    header: "Updated",
+    accessorFn: (row) => row.updatedAt,
     cell: ({ row }) => (
-      <HosGauge
-        value={row.original.cycleTime.accumulatedTime}
-        max={row.original.cycleTime.limitTime}
-        label="Cycle"
-        color="var(--cycle)"
-      />
+      <div className="text-xs">
+        {DateTime.fromMillis(row.original.updatedAt)
+          .setZone("America/Chicago")
+          .toRelative()}{" "}
+        - {formatTimestampEvent(row.original.updatedAt)}
+      </div>
     ),
   },
 ];
@@ -139,7 +207,6 @@ export function DriverTable({ data }: { data: DriverSimplified[] }) {
     const searchTerm = search.toLowerCase();
 
     return data.filter((driver) => {
-      console.log({ driver });
       return (
         driver.name.toLowerCase().includes(searchTerm) ||
         driver.vehicle.name.toLowerCase().includes(searchTerm)

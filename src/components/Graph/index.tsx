@@ -710,7 +710,7 @@ export default function ELDGraph({
           })}
         </div>
         <div
-          className="mt-5 flex gap-2"
+          className="mt-5 mb-2 flex h-6 gap-2"
           style={{ paddingLeft: GRAPH_SIZES.paddingLeft }}
         >
           {currentDayVios.map((v, i) => (
@@ -718,7 +718,7 @@ export default function ELDGraph({
               key={`${v.rule}-${v.startTs}-${i}`}
               onMouseEnter={() => setHoveredViolation(v)}
               onMouseLeave={() => setHoveredViolation(null)}
-              className="w-fit rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm text-red-500"
+              className="w-fit rounded-md border border-red-500/30 bg-red-500/10 px-3 text-sm text-red-500"
             >
               ⚠ {v.rule} violation at{" "}
               {DateTime.fromMillis(v.startTs).toFormat("MM/dd hh:mm:ss a")}

@@ -12,7 +12,6 @@ import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { useAppClipboardStore } from "@/lib/store/useAppClipboard";
-import { toast } from "sonner";
 
 type LocationProps = {
   event: HosEvent;
@@ -21,8 +20,9 @@ type LocationProps = {
 
 export const Location = ({ event, isLocationError }: LocationProps) => {
   const { updateEvent } = useTransactionContext();
-  const { canPasteLocation, copyLocation, resolveLocation } =
-    useAppClipboardStore((s) => s);
+  const { canPasteLocation, copyLocation, getLocation } = useAppClipboardStore(
+    (s) => s,
+  );
 
   const disabled = event.i;
   return (
@@ -30,7 +30,7 @@ export const Location = ({ event, isLocationError }: LocationProps) => {
       <ContextMenuTrigger disabled={disabled} asChild>
         <div className={cn(isLocationError && "text-error-fg")}>
           {event.location ? (
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-4">
               <Dialog>
                 <DialogTrigger asChild>
                   <button className="cursor-pointer transition-colors hover:text-blue-500">
@@ -81,22 +81,14 @@ export const Location = ({ event, isLocationError }: LocationProps) => {
         </ContextMenuItem>
 
         <ContextMenuItem
-          onClick={async () => {
-            const location = await resolveLocation();
-            if (location) {
-              updateEvent(event._id, (prev) => ({
-                ...prev,
-                location: {
-                  ...prev.location,
-                  ...location,
-                  source: prev.location?.source ?? "E",
-                  timestamp:
-                    prev.location?.timestamp ?? event.eventTime.timestamp,
-                },
-              }));
-            } else {
-              toast.error("Couldn't generate a location.");
-            }
+          disabled={!canPasteLocation()}
+          onClick={() => {
+            const location = getLocation();
+
+            updateEvent(event._id, (prev) => ({
+              ...prev,
+              location,
+            }));
           }}
         >
           Paste location

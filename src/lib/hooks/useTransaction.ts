@@ -467,7 +467,9 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       return changed;
     });
 
-    const deletedEventIdsToSave = [...deletedEventIds];
+    const deletedEventIdsToSave = [...deletedEventIds].filter((id) =>
+      originalMap.has(id),
+    );
 
     const changedLogs = Object.entries(dailyLogEdits)
       .map(([id, editedLog]) => {
@@ -505,8 +507,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   ]);
 
   // temp log
-  const savePayload = getSavePayload();
-  console.log({ savePayload });
+  // const savePayload = getSavePayload();
+  // console.log({ savePayload });
 
   const getSaveStats = () => {
     const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
@@ -745,6 +747,147 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     ]);
   };
 
+  const fixSeqIds = () => {
+    const from = DateTime.now()
+      .setZone("America/Chicago")
+      .startOf("day")
+      .minus({ days: 8 })
+      .toMillis();
+
+    const recentEvents = sortEvents(
+      events.filter((event) => event.eventTime.timestamp >= from),
+    );
+
+    if (recentEvents.length === 0) {
+      toast.error("No events found in the last 8 days.");
+      return;
+    }
+
+    const lastEvent = recentEvents.at(-1)!;
+    const lastSeqId = parseInt(lastEvent.seqId, 16);
+
+    if (!Number.isFinite(lastSeqId)) {
+      throw new Error(`Invalid seqId: ${lastEvent.seqId}`);
+    }
+
+    const firstSeqId = lastSeqId - (recentEvents.length - 1);
+
+    const seqIdsById = new Map(
+      recentEvents.map((event, index) => [
+        event._id,
+        (firstSeqId + index).toString(16),
+      ]),
+    );
+
+    setEvents((previous) =>
+      previous.map((event) => {
+        const nextSeqId = seqIdsById.get(event._id);
+
+        if (nextSeqId == null || nextSeqId === event.seqId) {
+          return event;
+        }
+
+        return {
+          ...event,
+          seqId: nextSeqId,
+        };
+      }),
+    );
+  };
+
+  const fixEngineHours = () => {
+    const fromTs = DateTime.now()
+      .setZone("America/Chicago")
+      .startOf("day")
+      .minus({ days: 8 })
+      .toMillis();
+
+    const recentEvents = sortEvents(
+      events.filter(
+        (event) =>
+          event.eventTime.timestamp >= fromTs &&
+          !event.eventCode.id.startsWith("DR_CERT_"),
+      ),
+    );
+
+    if (recentEvents.length === 0) {
+      toast.error("No events found in the last 8 days.");
+      return;
+    }
+
+    const vehicleIds = new Set(
+      recentEvents.map((event) => event.vehicle?.name ?? null),
+    );
+
+    if (vehicleIds.size !== 1) {
+      toast.error("truck change");
+      return;
+    }
+
+    const lastEvent = recentEvents.at(-1)!;
+
+    if (lastEvent.totalEngineHours == null) {
+      toast.error("The last event is missing engine hours.");
+      return;
+    }
+
+    const engineOnAfterEvent: boolean[] = [];
+
+    let engineOn = true;
+
+    for (let i = 0; i < recentEvents.length; i++) {
+      const event = recentEvents[i];
+
+      if (event.eventCode.id === "ENG_UP_NORMAL") {
+        engineOn = true;
+      } else if (event.eventCode.id === "ENG_DOWN_NORMAL") {
+        engineOn = false;
+      }
+      engineOnAfterEvent[i] = engineOn;
+    }
+
+    const fixedEngineHoursById = new Map<string, number>();
+
+    const anchorEngineHours = lastEvent.totalEngineHours;
+
+    fixedEngineHoursById.set(
+      lastEvent._id,
+      roundEngineHours(anchorEngineHours),
+    );
+
+    let expectedHoursFromCurrentToLast = 0;
+
+    for (let i = recentEvents.length - 2; i >= 0; i--) {
+      const current = recentEvents[i];
+      const next = recentEvents[i + 1];
+
+      const elapsedHours =
+        (next.eventTime.timestamp - current.eventTime.timestamp) / 3_600_000;
+
+      if (engineOnAfterEvent[i]) {
+        expectedHoursFromCurrentToLast += elapsedHours;
+      }
+
+      const fixedEngineHours =
+        anchorEngineHours - expectedHoursFromCurrentToLast;
+
+      fixedEngineHoursById.set(current._id, roundEngineHours(fixedEngineHours));
+    }
+
+    setEvents((prev) =>
+      prev.map((event) => {
+        const fixedEngineHours = fixedEngineHoursById.get(event._id);
+        if (fixedEngineHours == null) {
+          return event;
+        }
+        return {
+          ...event,
+          totalEngineHours: fixedEngineHours,
+        };
+      }),
+    );
+  };
+
   const dailyLogs = [
     ...(data?.dailyLogsData ?? []).filter((log) => !dailyLogEdits[log._id]),
     ...Object.values(dailyLogEdits),
@@ -782,5 +925,10 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     // functions
     fixCert,
     fixInt,
+    fixSeqIds,
+    fixEngineHours,
   };
 };
+
+const roundEngineHours = (value: number) =>
+  Math.round((value + Number.EPSILON) * 10) / 10;

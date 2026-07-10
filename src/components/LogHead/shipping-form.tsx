@@ -34,7 +34,7 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
   const [pendingCoDriver, setPendingCoDriver] = useState(
     dailyLog?.form.coDriver ?? undefined,
   );
-
+  console.log({ SIGNATURE: signature });
   const dailyLogID =
     dailyLog?._id || `DailyLog:${driverId}:${selectedDay.toFormat("yyyyMMdd")}`;
 
@@ -63,6 +63,7 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
           co={true}
           onSelect={(id) => {
             const selectedDriver = drivers.find((d) => d.id === id);
+
             setPendingCoDriverId(id);
             setPendingCoDriver(selectedDriver?.dataAsCoDriver);
           }}

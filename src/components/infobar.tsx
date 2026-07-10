@@ -53,7 +53,7 @@ export function InfoBar({
       )
     : null;
   return (
-    <div className="bg-muted/40 mb-2 flex items-center justify-between rounded-md border px-6 py-1.5 text-sm">
+    <div className="bg-muted/40 flex items-center justify-between rounded-md border px-6 py-1.5 text-sm">
       <div className="flex items-center gap-4">
         <div>
           {isConnected ? (

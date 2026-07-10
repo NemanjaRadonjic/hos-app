@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useLatestDriverStatuses } from "./useLatestDriverStatuses";
 import { useUsers } from "./useUsers";
 import { useVehicles } from "./useVehicles";
-import type { DriverInfo, Vehicle } from "../types";
+import type { DriverInfo, HosEvent, Vehicle } from "../types";
 
 type TimeRule = {
   accumulatedRestartTime: number;
@@ -25,8 +25,9 @@ export type DriverSimplified = {
   name: string;
   status: string;
   isConnected: boolean;
-  location: string;
+  location: HosEvent["location"];
   phone: string;
+  updatedAt: number;
   vehicle: { id: string; name: string; vin: string };
 
   breakTime: TimeRule;
@@ -83,8 +84,9 @@ export const useDriversData = (): UseDriversDataResult => {
             : "Unknown Driver",
           vehicle: { ...status.vehicle, name: vehicle?.name },
           status: status.hosEvent.eventCode.id,
-          location: status.location?.calculatedLocation || "Unknown Location",
+          location: status.location,
           phone: driver.phoneNum,
+          updatedAt: status.updatedAt,
           driveTime: status.driveTime,
           shiftTime: status.shiftTime,
           breakTime: status.breakTime,

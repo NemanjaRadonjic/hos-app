@@ -43,7 +43,8 @@ export type LogIssueCode =
   | "DRIVING_WHILE_ENGINE_OFF"
   | "TELEPORT_WITH_ODOMETER_CHANGE"
   | "ENGINE_HOURS_CHANGED_WHILE_ENGINE_OFF"
-  | "INVALID_ENGINE_HOURS_DELTA";
+  | "INVALID_ENGINE_HOURS_DELTA"
+  | "INVALID_SEQ_ID_ORDER";
 
 type ISSUE_GROUP =
   | "Certification"
@@ -55,7 +56,8 @@ type ISSUE_GROUP =
   | "Time"
   | "Possible speeding"
   | "Interlocation"
-  | "Event";
+  | "Event"
+  | "ID";
 
 export type LogIssue = {
   eventId?: string;
@@ -271,6 +273,7 @@ export function buildLogCheck({
   let drivingAnchor: HosEvent | null = null;
   let expectedInterlocationTs: number | null = null;
   let prevEnginePowerEvent: HosEvent | undefined;
+  let prevSeqId: string | null = null;
   // OTHER
   for (const { event, info } of enrichedEvents) {
     const isCert = event.eventCode.id.startsWith("DR_CERT_");
@@ -328,8 +331,8 @@ export function buildLogCheck({
     }
 
     // NO ODO CHANGE WHILE YES LOCATION CHANGE
-    if ((isMovement || isStop) && prevMovementEvent) {
-      const prevLocation = prevMovementEvent.location?.calculatedLocation;
+    if ((isMovement || isStop) && prevEvent) {
+      const prevLocation = prevEvent.location?.calculatedLocation;
       const currentLocation = event.location?.calculatedLocation;
 
       const locationChanged =
@@ -338,9 +341,8 @@ export function buildLogCheck({
         prevLocation !== currentLocation;
 
       const miles =
-        event.totalVehicleMiles != null &&
-        prevMovementEvent.totalVehicleMiles != null
-          ? event.totalVehicleMiles - prevMovementEvent.totalVehicleMiles
+        event.totalVehicleMiles != null && prevEvent.totalVehicleMiles != null
+          ? event.totalVehicleMiles - prevEvent.totalVehicleMiles
           : null;
 
       if (locationChanged && miles === 0) {
@@ -388,13 +390,17 @@ export function buildLogCheck({
       event.totalEngineHours != null &&
       prevEvent.totalEngineHours != null
     ) {
-      const actualDelta = event.totalEngineHours - prevEvent.totalEngineHours;
-
       const elapsedHours =
         (event.eventTime.timestamp - prevEvent.eventTime.timestamp) / 3_600_000;
 
+      const actualDelta = roundToOneDecimal(
+        event.totalEngineHours - prevEvent.totalEngineHours,
+      );
+
       const engineIsDown =
         prevEnginePowerEvent?.eventCode.id === "ENG_DOWN_NORMAL";
+
+      const expectedDelta = engineIsDown ? 0 : ceilToOneDecimal(elapsedHours);
 
       if (engineIsDown && actualDelta !== 0) {
         issues.push({
@@ -409,21 +415,19 @@ export function buildLogCheck({
         });
       }
 
-      if (!engineIsDown) {
-        const diff = Math.abs(actualDelta - elapsedHours);
+      const difference = Math.abs(actualDelta - expectedDelta);
 
-        if (diff > 0.05) {
-          issues.push({
-            group: "Engine Hours",
-            code: "INVALID_ENGINE_HOURS_DELTA",
-            eventId: event._id,
-            logDate: event.eventTime.logDate.date,
-            severity: "warning",
-            message: `Engine hours changed by ${actualDelta.toFixed(
-              1,
-            )}, expected ${elapsedHours.toFixed(1)}.`,
-          });
-        }
+      if (!engineIsDown && difference > 0.100001) {
+        issues.push({
+          group: "Engine Hours",
+          code: "INVALID_ENGINE_HOURS_DELTA",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "warning",
+          message: `Engine hours changed by ${actualDelta.toFixed(
+            1,
+          )} - expected ${expectedDelta.toFixed(1)}`,
+        });
       }
     }
 
@@ -722,6 +726,23 @@ export function buildLogCheck({
       }
     }
 
+    // ID
+    if (prevSeqId) {
+      const previousSeq = parseInt(prevSeqId, 16);
+      const currentSeq = parseInt(event.seqId, 16);
+
+      if (currentSeq !== previousSeq + 1) {
+        issues.push({
+          group: "ID",
+          code: "INVALID_SEQ_ID_ORDER",
+          eventId: event._id,
+          logDate: event.eventTime.logDate.date,
+          severity: "warning",
+          message: `ID is ${currentSeq} - expected ${previousSeq + 1}.`,
+        });
+      }
+    }
+
     if (isMovement) {
       prevMovementEvent = event;
     }
@@ -742,7 +763,15 @@ export function buildLogCheck({
     if (!isSystem) {
       prevTimestamp = event.eventTime.timestamp;
     }
+
+    prevSeqId = event.seqId;
   }
 
   return { byDate, issues };
 }
+
+const ceilToOneDecimal = (value: number) =>
+  Math.ceil((value + Number.EPSILON) * 10) / 10;
+
+const roundToOneDecimal = (value: number) =>
+  Math.round((value + Number.EPSILON) * 10) / 10;

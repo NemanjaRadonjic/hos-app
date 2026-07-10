@@ -498,13 +498,19 @@ function isValidSplitPair(first: RestInfo, second: RestInfo) {
   );
 }
 
-function findPreviousSplitPairIndex(rests: RestInfo[], currentIndex: number) {
+function findPreviousSplitPairIndex(
+  rests: RestInfo[],
+  currentIndex: number,
+  usedAsFirst: Set<number>,
+) {
   const current = rests[currentIndex];
 
   for (let i = currentIndex - 1; i >= 0; i--) {
     const prev = rests[i];
 
     if (prev.isFullReset) break;
+
+    if (usedAsFirst.has(i)) continue;
 
     if (isValidSplitPair(prev, current)) {
       return i;
@@ -517,16 +523,19 @@ function findPreviousSplitPairIndex(rests: RestInfo[], currentIndex: number) {
 function annotateSplitPairs(rests: RestInfo[]): RestInfo[] {
   const next = rests.map((r) => ({ ...r }));
 
+  const usedAsFirst = new Set<number>();
   for (let i = 0; i < next.length; i++) {
     const current = next[i];
 
-    const pairIndex = findPreviousSplitPairIndex(next, i);
+    const pairIndex = findPreviousSplitPairIndex(next, i, usedAsFirst);
 
     if (pairIndex !== null) {
       const previous = next[pairIndex];
 
       previous.excludedFrom14h = true;
       current.excludedFrom14h = true;
+
+      usedAsFirst.add(pairIndex);
 
       if (!current.isFullReset) {
         current.anchorAfterThisRestTs = previous.endTs;
@@ -535,11 +544,7 @@ function annotateSplitPairs(rests: RestInfo[]): RestInfo[] {
       continue;
     }
 
-    if (current.isFullReset) {
-      continue;
-    }
-
-    if (current.isBig) {
+    if (!current.isFullReset && current.isBig) {
       current.excludedFrom14h = true;
     }
   }

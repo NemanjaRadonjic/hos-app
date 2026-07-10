@@ -16,6 +16,7 @@ import { TbRoute2 } from "react-icons/tb";
 import { useSelectionStore } from "@/lib/store/useSelectionStore";
 import { DateTime } from "luxon";
 import type { LogIssue } from "@/lib/log-check";
+import { RiSortNumberDesc } from "react-icons/ri";
 
 type ControlBarProps = {
   selectedIds: Set<string>;
@@ -43,6 +44,8 @@ export default function ControlBar({
     getSaveStats,
     fixCert,
     fixInt,
+    fixSeqIds,
+    fixEngineHours,
   } = useTransactionContext();
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const resetSelection = useSelectionStore((s) => s.resetSelection);
@@ -173,7 +176,19 @@ export default function ControlBar({
       <div>
         <Button onClick={() => fixCert(selectedDay)}>
           <FaCertificate className="size-3" />
-          Fix Cert
+          Cert
+        </Button>
+      </div>
+      <div>
+        <Button onClick={() => fixSeqIds()}>
+          <RiSortNumberDesc className="size-3" />
+          Fix Ids
+        </Button>
+      </div>
+      <div>
+        <Button onClick={() => fixEngineHours()}>
+          <RiSortNumberDesc className="size-3" />
+          Fix Engine Hours
         </Button>
       </div>
       <div className="ml-auto flex items-center gap-2">
