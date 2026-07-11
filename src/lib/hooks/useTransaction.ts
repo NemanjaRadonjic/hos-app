@@ -613,8 +613,8 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     const selected = events.find((e) => e._id === selectedId);
 
     if (!selected) return;
-    if (selected.eventCode.id !== "DS_D") {
-      toast.error("Selected event is not a driving event.");
+    if (isLockedEvent(selected)) {
+      toastLocked();
       return;
     }
 
@@ -733,18 +733,17 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       };
     });
 
-    setEvents((prev) => [
-      ...prev.filter(
-        (event) =>
-          !(
-            event._id !== selected._id &&
-            event._id !== endEvent._id &&
-            event.eventTime.timestamp > selected.eventTime.timestamp &&
-            event.eventTime.timestamp < endEvent.eventTime.timestamp
-          ),
-      ),
-      ...interlocationEvents,
-    ]);
+    const replacedEvents = events.filter(
+      (event) =>
+        event._id !== selected._id &&
+        event._id !== endEvent._id &&
+        event.eventTime.timestamp > selected.eventTime.timestamp &&
+        event.eventTime.timestamp < endEvent.eventTime.timestamp,
+    );
+
+    deleteEvents(new Set(replacedEvents.map((event) => event._id)));
+
+    setEvents((prev) => [...prev, ...interlocationEvents]);
   };
 
   const fixSeqIds = () => {
@@ -757,6 +756,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     const recentEvents = sortEvents(
       events.filter((event) => event.eventTime.timestamp >= from),
     );
+
+    if (isServerLockedEvent(recentEvents)) {
+      toast.error("Some events are locked");
+      return;
+    }
 
     if (recentEvents.length === 0) {
       toast.error("No events found in the last 8 days.");
@@ -771,6 +775,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     }
 
     const firstSeqId = lastSeqId - (recentEvents.length - 1);
+
+    if (firstSeqId < 0) {
+      toast.error("Can't fix id's because some would be negative");
+      return;
+    }
 
     const seqIdsById = new Map(
       recentEvents.map((event, index) => [
@@ -793,6 +802,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
         };
       }),
     );
+    toast.success("ID's fixed successfully");
   };
 
   const fixEngineHours = () => {
@@ -809,6 +819,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
           !event.eventCode.id.startsWith("DR_CERT_"),
       ),
     );
+
+    if (isServerLockedEvent(recentEvents)) {
+      toast.error("Some events are locked");
+      return;
+    }
 
     if (recentEvents.length === 0) {
       toast.error("No events found in the last 8 days.");
@@ -886,6 +901,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
         };
       }),
     );
+    toast.success("Engine hours fixed successfully");
   };
 
   const dailyLogs = [

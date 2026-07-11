@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { HosEvent } from "@/lib/types";
 import type { DateTime } from "luxon";
 import { devtools } from "zustand/middleware";
+import { isServerLockedEvent } from "../hooks/useTransaction";
 
 type SliderSelection = {
   start: number;
@@ -29,7 +30,7 @@ type SelectionStore = {
           selectableEvents: HosEvent[];
         }
       | undefined,
-  ) => void;
+  ) => boolean;
   setSliderActive: (active: boolean) => void;
 };
 
@@ -48,9 +49,7 @@ export const useSelectionStore = create<SelectionStore>()(
       setSelection: (ids, selectableEvents) => {
         const next = new Set(ids);
 
-        const blocked = selectableEvents.some((e) => e.i && next.has(e._id));
-
-        if (blocked) {
+        if (isServerLockedEvent(selectableEvents)) {
           toast.error("Locked events cannot be selected.");
           return;
         }
@@ -63,9 +62,7 @@ export const useSelectionStore = create<SelectionStore>()(
 
         next.has(id) ? next.delete(id) : next.add(id);
 
-        const blocked = selectableEvents.some((e) => e.i && next.has(e._id));
-
-        if (blocked) {
+        if (isServerLockedEvent(selectableEvents)) {
           toast.error("Locked events cannot be selected.");
           return;
         }
@@ -90,7 +87,7 @@ export const useSelectionStore = create<SelectionStore>()(
       ) => {
         if (!options) {
           set({ sliderSelection });
-          return;
+          return true;
         }
 
         const start = Math.min(sliderSelection.start, sliderSelection.end);
@@ -101,19 +98,29 @@ export const useSelectionStore = create<SelectionStore>()(
         const endTs =
           options.selectedDay.startOf("day").toMillis() + end * 60_000;
 
-        const selectedIds = new Set(
-          options.selectableEvents
-            .filter((event) => {
-              const ts = event.eventTime.timestamp;
-              return ts >= startTs && ts <= endTs;
-            })
-            .map((event) => event._id),
-        );
+        const eventsInRange = options.selectableEvents.filter((event) => {
+          const ts = event.eventTime.timestamp;
+          return ts >= startTs && ts <= endTs;
+        });
+
+        if (isServerLockedEvent(eventsInRange)) {
+          toast.error("Locked events cannot be selected.");
+          set({
+            selectedIds: new Set(),
+            sliderActive: false,
+          });
+          // used to cancel the ref in the graph
+          return false;
+        }
+
+        const selectedIds = new Set(eventsInRange.map((event) => event._id));
 
         set({
           sliderSelection,
           selectedIds,
         });
+
+        return true;
       },
 
       setSliderActive: (sliderActive) => {

@@ -237,7 +237,6 @@ export default function ELDGraph({
         });
 
       if (clickedEvent) {
-        requestAnimationFrame(draw);
         setFocusedId(clickedEvent._id);
       }
     },
@@ -511,6 +510,55 @@ export default function ELDGraph({
   };
 
   const noteEvents = events.filter((e) => e.eventComment);
+
+  const handleDragMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging.current) return;
+
+      didDrag.current = true;
+
+      const minutes = xToMinutes(e.clientX);
+
+      sliderSelectionRef.current = {
+        ...sliderSelectionRef.current,
+        [isDragging.current]: minutes,
+      };
+
+      requestAnimationFrame(draw);
+    },
+    [draw],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    if (!isDragging.current) return;
+
+    const success = setSliderSelection(sliderSelectionRef.current, {
+      selectedDay,
+      selectableEvents: events,
+    });
+
+    if (success) {
+      setSliderActive(true);
+    } else {
+      sliderSelectionRef.current = { start: 0, end: 0 };
+      sliderActiveRef.current = false;
+    }
+
+    isDragging.current = null;
+
+    window.removeEventListener("mousemove", handleDragMove);
+    window.removeEventListener("mouseup", handleDragEnd);
+
+    requestAnimationFrame(draw);
+  }, [
+    draw,
+    events,
+    selectedDay,
+    setSliderActive,
+    setSliderSelection,
+    handleDragMove,
+  ]);
+
   return (
     <>
       <div className="relative mx-auto w-full max-w-[1800px]">
@@ -519,6 +567,7 @@ export default function ELDGraph({
           onClick={handleCanvasClick}
           onMouseDown={(e) => {
             didDrag.current = false;
+
             if (!e.shiftKey) {
               isDragging.current = null;
               return;
@@ -527,64 +576,15 @@ export default function ELDGraph({
             const minutes = xToMinutes(e.clientX);
 
             sliderActiveRef.current = true;
-
             sliderSelectionRef.current = {
               start: minutes,
               end: minutes,
             };
 
             isDragging.current = "end";
-            requestAnimationFrame(draw);
-          }}
-          onMouseMove={(e) => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
 
-            const rect = canvas.getBoundingClientRect();
-
-            mouseX.current =
-              (e.clientX - rect.left) * (GRAPH_SIZES.canvasWidth / rect.width);
-
-            if (isDragging.current) {
-              didDrag.current = true;
-              const minutes = xToMinutes(e.clientX);
-
-              sliderSelectionRef.current = {
-                ...sliderSelectionRef.current,
-                [isDragging.current]: minutes,
-              };
-
-              // canvas-only redraw
-              requestAnimationFrame(draw);
-            } else {
-              requestAnimationFrame(draw);
-            }
-          }}
-          onMouseUp={() => {
-            if (isDragging.current) {
-              setSliderActive(sliderActiveRef.current);
-
-              setSliderSelection(sliderSelectionRef.current, {
-                selectedDay,
-                selectableEvents: events,
-              });
-            }
-
-            isDragging.current = null;
-          }}
-          onMouseLeave={() => {
-            mouseX.current = null;
-
-            if (isDragging.current) {
-              setSliderActive(sliderActiveRef.current);
-
-              setSliderSelection(sliderSelectionRef.current, {
-                selectedDay,
-                selectableEvents: events,
-              });
-            }
-
-            isDragging.current = null;
+            window.addEventListener("mousemove", handleDragMove);
+            window.addEventListener("mouseup", handleDragEnd);
 
             requestAnimationFrame(draw);
           }}
