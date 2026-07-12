@@ -6,24 +6,19 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import type { CommitProgress } from "@/lib/hooks/useTransaction";
+import type {
+  CommitProgress,
+  TransactionDetails,
+} from "@/lib/hooks/useTransaction";
 import { Spinner } from "./ui/spinner";
 import { useHealth } from "@/lib/helpers/health-check";
 import { LogCheckList } from "./log-check-list";
 import { DateTime } from "luxon";
 import { BsCheckCircleFill } from "react-icons/bs";
 import { BiSolidError } from "react-icons/bi";
+import type { LogDiagnosticsState, LogIssue } from "@/lib/log-check";
 
 type CommitPhase = "confirm" | "saving" | "success" | "error";
-
-type SaveStats = {
-  changedEvents: number;
-  changedLogs: number;
-  deletedEvents: number;
-  totalRequests: number;
-};
 
 export function CommitDialog({
   open,
@@ -31,7 +26,7 @@ export function CommitDialog({
   onConfirm,
   phase,
   progress,
-  stats,
+  transactionDetails,
   diagnostics,
   handleIssueClick,
 }: {
@@ -40,7 +35,7 @@ export function CommitDialog({
   onConfirm: () => Promise<void>;
   phase: CommitPhase;
   progress: CommitProgress;
-  stats: SaveStats;
+  transactionDetails: TransactionDetails;
   diagnostics: LogDiagnosticsState;
   handleIssueClick: (issue: LogIssue) => void;
 }) {
@@ -80,11 +75,56 @@ export function CommitDialog({
               This will save all pending changes.
             </p>
 
-            <div className="rounded-md border p-3">
-              <div>Modified events: {stats.changedEvents}</div>
-              <div>Modified logs: {stats.changedLogs}</div>
-              <div>Deleted events: {stats.deletedEvents}</div>
-              <div>Total requests: {stats.totalRequests}</div>
+            <div className="bg-muted/30 rounded-lg border p-4">
+              <div className="mb-3 border-b pb-3">
+                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Modified range
+                </div>
+
+                <div className="mt-1 font-semibold">
+                  {transactionDetails.from === transactionDetails.to
+                    ? transactionDetails.from
+                    : `${transactionDetails.from} – ${transactionDetails.to}`}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Modified events
+                  </div>
+                  <div className="font-semibold">
+                    {transactionDetails.changedEvents}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Modified logs
+                  </div>
+                  <div className="font-semibold">
+                    {transactionDetails.changedLogs}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Deleted events
+                  </div>
+                  <div className="font-semibold">
+                    {transactionDetails.deletedEvents}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Total requests
+                  </div>
+                  <div className="font-semibold">
+                    {transactionDetails.totalRequests}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-col">

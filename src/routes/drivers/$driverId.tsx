@@ -331,10 +331,10 @@ function DriverPage() {
                   <TableHead className="w-30">Odometer</TableHead>
                   <TableHead className="w-30">Eng. Hours</TableHead>
                   <TableHead className="w-52">Note</TableHead>
-                  <TableHead className="w-26 text-center">Actions</TableHead>
                   <TableHead className="w-14">ELD</TableHead>
                   <TableHead className="w-14">Vehicle</TableHead>
                   <TableHead className="w-14">ID</TableHead>
+                  <TableHead className="w-26 text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

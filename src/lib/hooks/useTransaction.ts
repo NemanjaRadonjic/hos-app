@@ -38,6 +38,15 @@ import { getCalculatedLocationData } from "../helpers/get-calculated-location";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
 
+export type TransactionDetails = {
+  from: string | null;
+  to: string | null;
+  changedEvents: number;
+  changedLogs: number;
+  deletedEvents: number;
+  totalRequests: number;
+};
+
 const toArray = (input: HosEvent | HosEvent[]) =>
   Array.isArray(input) ? input : [input];
 
@@ -105,6 +114,22 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   const [dailyLogEdits, setDailyLogEdits] = useState<Record<string, DailyLog>>(
     {},
   );
+
+  // alert on window close if status not idle
+  useEffect(() => {
+    if (status === "idle") return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [status]);
 
   // handle status state directly from the diffing
   useEffect(() => {
@@ -205,8 +230,11 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       toastLocked();
       return;
     }
+
+    const { eventComment, ...rest } = event;
+
     const newEvent: HosEvent = {
-      ...event,
+      ...rest,
       _id: generateHosEventId(),
     };
 
@@ -510,15 +538,61 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
   // const savePayload = getSavePayload();
   // console.log({ savePayload });
 
-  const getSaveStats = () => {
+  const getTransactionDetails = (): TransactionDetails => {
     const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
 
+    const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
+      "driverData",
+      userId,
+    ]);
+
+    const originalEvents =
+      cachedData?.pages.flatMap((page) => page.eventsData) ?? [];
+
+    const originalMap = new Map(
+      originalEvents.map((event) => [event._id, event]),
+    );
+
+    const dates = new Set<string>();
+
+    // New / updated event dates
+    for (const event of changedEvents) {
+      dates.add(event.eventTime.logDate.date);
+
+      // Include original date in case the event moved to another day
+      const original = originalMap.get(event._id);
+
+      if (original) {
+        dates.add(original.eventTime.logDate.date);
+      }
+    }
+
+    // Deleted event dates
+    for (const id of deletedEventIds) {
+      const original = originalMap.get(id);
+
+      if (original) {
+        dates.add(original.eventTime.logDate.date);
+      }
+    }
+
+    // Changed daily log dates
+    for (const log of changedLogs) {
+      dates.add(log.logDate.date);
+    }
+
+    const sortedDates = [...dates].sort();
+
     return {
+      from: sortedDates[0] ?? null,
+      to: sortedDates.at(-1) ?? null,
+
       changedEvents: changedEvents.length,
       changedLogs: changedLogs.length,
       deletedEvents: deletedEventIds.length,
+
       totalRequests:
-        changedEvents.length + deletedEventIds.length + changedLogs.length * 2, // daily log + summary
+        changedEvents.length + deletedEventIds.length + changedLogs.length * 2,
     };
   };
 
@@ -554,7 +628,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     });
 
     if (!anchorEvent) {
-      toast.error("No future status event found to certify this day.");
+      toast.error("No valid status event found.");
       return;
     }
 
@@ -914,7 +988,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     getDailyLog,
     getSummary,
-    getSaveStats,
+    getTransactionDetails,
 
     events,
     lastKnownEvent: data?.lastKnownEvent,

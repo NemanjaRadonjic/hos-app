@@ -27,6 +27,30 @@ export default function drawLineGraph({
   selectedDay,
   GRAPH_SIZES,
 }: DrawLineGraphProps) {
+  // const drawTextWithBackground = (
+  //   text: string,
+  //   x: number,
+  //   y: number,
+  //   paddingX = 3,
+  //   paddingY = 2,
+  // ) => {
+  //   const metrics = ctx.measureText(text);
+  //   const textWidth = metrics.width;
+
+  //   const textHeight =
+  //     metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+
+  //   ctx.fillStyle = "#fff";
+  //   ctx.fillRect(
+  //     x - textWidth / 2 - paddingX,
+  //     y - metrics.actualBoundingBoxAscent - paddingY,
+  //     textWidth + paddingX * 2,
+  //     textHeight + paddingY * 2,
+  //   );
+
+  //   ctx.fillStyle = "#000";
+  //   ctx.fillText(text, x, y);
+  // };
   const { paddingLeft, graphWidth, lineWidth, fontSize } = GRAPH_SIZES;
   dutyEvents.forEach((event, i) => {
     if (i === 0) return;
@@ -98,11 +122,11 @@ export default function drawLineGraph({
         centerX,
         y - lineWidth * 2,
       );
-    } else if (duration > 15) {
+    } else if (duration > 10) {
       ctx.fillText(
         minutesToHours(duration),
         centerX,
-        event.status === "DS_ON" ? y + lineWidth * 3 : y - lineWidth * 2,
+        event.status === "DS_ON" ? y + lineWidth * 4 : y - lineWidth * 2,
       );
     }
 

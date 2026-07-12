@@ -3,9 +3,7 @@ import { TableCell, TableRow } from "../ui/table";
 import { DateTime, Duration } from "luxon";
 import {
   ICON_SIZES,
-  ORIGIN_MAP,
   ORIGIN_MAP_SHORT,
-  STATUS_MAP,
   STATUS_MAP_SHORT,
   TZ_MAP,
 } from "@/lib/maps";
@@ -18,24 +16,18 @@ import EventCode from "./event-code";
 import { memo } from "react";
 import type { EventInfo } from "@/routes/drivers/$driverId";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import {
-  BiError,
-  BiSolidDuplicate,
-  BiSolidEdit,
-  BiSolidMessageSquareEdit,
-  BiSolidTrashAlt,
-} from "react-icons/bi";
+import { BiSolidTrashAlt } from "react-icons/bi";
 import { Location } from "./location";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
-import { toast } from "sonner";
+
 import {
   isServerLockedEvent,
   isUserLockedEvent,
 } from "@/lib/hooks/useTransaction";
-import { FaLock, FaUnlock } from "react-icons/fa6";
+
 import { MdEditDocument, MdError } from "react-icons/md";
-import { FaEdit } from "react-icons/fa";
-import { RiFileEditFill, RiLockFill, RiLockStarFill } from "react-icons/ri";
+
+import { RiLockFill, RiLockStarFill } from "react-icons/ri";
 import { HiDocumentDuplicate } from "react-icons/hi2";
 import { checkKnownLocation } from "@/lib/helpers/check-known-location";
 import {
@@ -46,6 +38,12 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import { useAppClipboardStore } from "@/lib/store/useAppClipboard";
+import { Eld } from "./eld";
+import { Vehicle } from "./vehicle";
+import { Odometer } from "./odometer";
+import { EngineHours } from "./engine-hours";
+import { Origin } from "./origin";
+import { Status } from "./status";
 
 interface LogEventProps {
   event: HosEvent;
@@ -271,140 +269,19 @@ const LogEvent = ({
           </Tooltip>
         )}
       </TableCell>
-      <TableCell
-        className={cn(
-          "text-muted-foreground truncate text-center text-xs",
-          isStatusError && "text-error-fg font-semibold",
-        )}
-      >
-        {STATUS_MAP_SHORT[event.recordStatus?.id]}
-      </TableCell>
-      <TableCell
-        className={cn(
-          "text-muted-foreground truncate text-center text-xs",
-          isOriginError && "text-error-fg font-semibold",
-        )}
-      >
-        {ORIGIN_MAP_SHORT[event.recordOrigin?.id]}
-      </TableCell>
-      <TableCell className="tabular-nums">
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div className="flex w-full items-center gap-2">
-              <span
-                className={cn(isOdometerError && "text-error-fg font-semibold")}
-              >
-                {event.totalVehicleMiles}
-              </span>
+      <Status event={event} hasError={isStatusError} />
+      <Origin event={event} hasError={isOriginError} />
+      <Odometer
+        event={event}
+        delta={eventInfo.odoDelta}
+        hasError={isOdometerError}
+      />
 
-              {eventInfo.odoDelta != null && eventInfo.odoDelta !== 0 && (
-                <div
-                  className={cn(
-                    "font-semibold",
-                    eventInfo.odoDelta < 0
-                      ? "text-error-fg"
-                      : "text-success-fg",
-                  )}
-                >
-                  ({eventInfo.odoDelta > 0 ? "+" : ""}
-                  {eventInfo.odoDelta})
-                </div>
-              )}
-            </div>
-          </ContextMenuTrigger>
-
-          <ContextMenuContent className="p-2">
-            <ContextMenuLabel>Odometer:</ContextMenuLabel>
-
-            <ContextMenuItem
-              disabled={event.totalVehicleMiles == null}
-              onClick={() => {
-                if (event.totalVehicleMiles == null) return;
-                copyOdometer(event.totalVehicleMiles);
-              }}
-            >
-              Copy odometer
-            </ContextMenuItem>
-
-            <ContextMenuItem
-              disabled={!canPasteOdometer()}
-              onClick={() => {
-                const odometer = getOdometer();
-
-                if (odometer == null) return;
-
-                updateEvent(event._id, (prev) => ({
-                  ...prev,
-                  totalVehicleMiles: odometer,
-                }));
-              }}
-            >
-              Paste odometer
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      </TableCell>
-
-      <TableCell className="tabular-nums">
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div className="flex w-full items-center gap-2">
-              <span
-                className={cn(
-                  isEngineHoursError && "text-error-fg font-semibold",
-                )}
-              >
-                {event.totalEngineHours}
-              </span>
-
-              {eventInfo.engHoursDelta != null &&
-                eventInfo.engHoursDelta !== 0 && (
-                  <div
-                    className={cn(
-                      "text-success-fg font-semibold",
-                      engineHoursIssueSeverity === "error" && "text-error-fg",
-                      engineHoursIssueSeverity === "warning" &&
-                        "text-warning-bg",
-                    )}
-                  >
-                    ({eventInfo.engHoursDelta > 0 ? "+" : ""}
-                    {eventInfo.engHoursDelta.toFixed(1)})
-                  </div>
-                )}
-            </div>
-          </ContextMenuTrigger>
-
-          <ContextMenuContent className="p-2">
-            <ContextMenuLabel>Engine hours:</ContextMenuLabel>
-
-            <ContextMenuItem
-              disabled={event.totalEngineHours == null}
-              onClick={() => {
-                if (event.totalEngineHours == null) return;
-                copyEngineHours(event.totalEngineHours);
-              }}
-            >
-              Copy engine hours
-            </ContextMenuItem>
-
-            <ContextMenuItem
-              disabled={!canPasteEngineHours()}
-              onClick={() => {
-                const engineHours = getEngineHours();
-
-                if (engineHours == null) return;
-
-                updateEvent(event._id, (prev) => ({
-                  ...prev,
-                  totalEngineHours: engineHours,
-                }));
-              }}
-            >
-              Paste engine hours
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      </TableCell>
+      <EngineHours
+        event={event}
+        delta={eventInfo.engHoursDelta}
+        issueSeverity={engineHoursIssueSeverity}
+      />
       <TableCell className="text-muted-foreground p-0 text-xs">
         {event.eventComment && (
           <div className="group relative w-full min-w-0">
@@ -441,6 +318,12 @@ const LogEvent = ({
             </Badge>
           </div>
         )}
+      </TableCell>
+
+      <Eld _id={event._id} eld={event.eld} />
+      <Vehicle _id={event._id} vehicle={event.vehicle} />
+      <TableCell className={cn("text-xs", isIDError && "text-warning")}>
+        {parseInt(event.seqId, 16)}
       </TableCell>
       <TableCell className="p-0">
         {isServerLocked ? (
@@ -499,11 +382,6 @@ const LogEvent = ({
             </button>
           </div>
         )}
-      </TableCell>
-      <TableCell className="text-xs">{event.eld?.sn?.slice(-4)}</TableCell>
-      <TableCell className="text-xs">{event.vehicle?.name}</TableCell>
-      <TableCell className={cn("text-xs", isIDError && "text-warning")}>
-        {parseInt(event.seqId, 16)}
       </TableCell>
     </TableRow>
   );

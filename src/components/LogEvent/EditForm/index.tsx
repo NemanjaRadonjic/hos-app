@@ -47,6 +47,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MdClear } from "react-icons/md";
 
 const mainStatusSet = new Set([
   "DS_OFF",
@@ -717,17 +718,28 @@ export function EditEventModal({
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <Label className="w-28">Note</Label>
-
-            <Input
-              className="ml-7"
-              onKeyDown={(e) => e.stopPropagation()}
-              disabled={!canEdit("eventComment")}
-              value={draft.event.note ?? ""}
-              onChange={(e) => updateDraft({ note: e.target.value })}
-            />
+            <div className="relative flex-1">
+              <Input
+                onKeyDown={(e) => e.stopPropagation()}
+                disabled={!canEdit("eventComment")}
+                value={draft.event.note ?? ""}
+                onChange={(e) => updateDraft({ note: e.target.value })}
+              />
+              {draft.event.note && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => updateDraft({ note: undefined })}
+                  className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2"
+                >
+                  <MdClear className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="ml-30 flex flex-wrap gap-1">
+          <div className="ml-30 flex flex-wrap gap-2">
             {NOTE_CHIPS.map((note) => (
               <Badge
                 key={note}

@@ -12,6 +12,7 @@ import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { useAppClipboardStore } from "@/lib/store/useAppClipboard";
+import { toast } from "sonner";
 
 type LocationProps = {
   event: HosEvent;
@@ -20,10 +21,8 @@ type LocationProps = {
 
 export const Location = ({ event, isLocationError }: LocationProps) => {
   const { updateEvent } = useTransactionContext();
-  const { canPasteLocation, copyLocation, getLocation } = useAppClipboardStore(
-    (s) => s,
-  );
-
+  const copyLocation = useAppClipboardStore((s) => s.copyLocation);
+  const locationData = useAppClipboardStore((s) => s.data.location);
   const disabled = event.i;
   return (
     <ContextMenu>
@@ -81,17 +80,32 @@ export const Location = ({ event, isLocationError }: LocationProps) => {
         </ContextMenuItem>
 
         <ContextMenuItem
-          disabled={!canPasteLocation()}
+          disabled={!locationData}
           onClick={() => {
-            const location = getLocation();
+            if (!locationData) return;
 
             updateEvent(event._id, (prev) => ({
               ...prev,
-              location,
+              location: locationData,
             }));
           }}
         >
           Paste location
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            if (event.location) {
+              const { lat, lon } = event.location;
+              navigator.clipboard.writeText(`${lat}, ${lon}`);
+              return;
+            } else if (event.driverLocationDescription) {
+              toast.error("Status has manual location");
+              return;
+            }
+            toast.error("Status has no location");
+          }}
+        >
+          Copy coordinates
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

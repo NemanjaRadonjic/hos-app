@@ -8,9 +8,9 @@ export const minutesToHours = (minutes: number): string => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
 
-  if (h === 0) return `${m}min`;
+  if (h === 0) return `${m}m`;
 
-  return `${h}h ${m}min`;
+  return `${h}h ${m}m`;
 };
 
 export const timestampToMinutes = (ts: number): number => {

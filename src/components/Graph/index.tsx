@@ -617,7 +617,7 @@ export default function ELDGraph({
                 )}
                 style={{
                   left: x,
-                  top: GRAPH_SIZES.canvasHeight - GRAPH_SIZES.paddingBottom + 4,
+                  top: GRAPH_SIZES.canvasHeight - GRAPH_SIZES.paddingBottom,
                   height: 28,
                   transform: `translateX(-50%) scale(${focusedId === event._id ? 1.1 : 1})`,
                   pointerEvents: "auto",

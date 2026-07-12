@@ -41,7 +41,7 @@ export default function ControlBar({
     reset,
     status,
     deleteEvents,
-    getSaveStats,
+    getTransactionDetails,
     fixCert,
     fixInt,
     fixSeqIds,
@@ -60,7 +60,7 @@ export default function ControlBar({
     waiting: null,
   });
 
-  const stats = getSaveStats();
+  const transactionDetails = getTransactionDetails();
 
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
@@ -197,6 +197,9 @@ export default function ControlBar({
           diagnostics={diagnostics}
         />
 
+        <Button variant="outline" disabled={status === "idle"} onClick={reset}>
+          Reset
+        </Button>
         <Button
           disabled={status === "idle"}
           onClick={() => {
@@ -206,23 +209,19 @@ export default function ControlBar({
         >
           Finish
         </Button>
-
-        <Button variant="outline" disabled={status === "idle"} onClick={reset}>
-          Reset
-        </Button>
       </div>
       <CommitDialog
         open={commitOpen}
         onOpenChange={setCommitOpen}
         phase={commitPhase}
-        stats={stats}
+        transactionDetails={transactionDetails}
         progress={commitProgress}
         onConfirm={async () => {
           setCommitPhase("saving");
 
           setCommitProgress({
             done: 0,
-            total: stats.totalRequests,
+            total: transactionDetails.totalRequests,
             success: 0,
             failed: 0,
             waiting: null,

@@ -2,20 +2,23 @@ import DriverSelect from "./driver-select";
 import { useParams } from "@tanstack/react-router";
 import { useDriversData } from "@/lib/hooks/useDriversData";
 import { Label } from "../ui/label";
-import { TagInput } from "../ui/tag-input";
+import { FormInput } from "../ui/form-input";
 import { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { MdClear } from "react-icons/md";
+import { findNearestSignature } from "@/lib/hooks/helpers/find-nearest-signature";
+import { toast } from "sonner";
+import { FaFileSignature } from "react-icons/fa";
 
 export const ShippingForm = ({ selectedDay, closeDialog }) => {
   const { driverId } = useParams({
     from: "/drivers/$driverId",
   });
   const { drivers } = useDriversData();
-  console.log({ driverId });
-  const { updateDailyLog, getDailyLog } = useTransactionContext();
+
+  const { updateDailyLog, getDailyLog, dailyLogs } = useTransactionContext();
 
   const dailyLog = getDailyLog(selectedDay.toFormat("yyyy/MM/dd"));
 
@@ -34,7 +37,7 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
   const [pendingCoDriver, setPendingCoDriver] = useState(
     dailyLog?.form.coDriver ?? undefined,
   );
-  console.log({ SIGNATURE: signature });
+
   const dailyLogID =
     dailyLog?._id || `DailyLog:${driverId}:${selectedDay.toFormat("yyyyMMdd")}`;
 
@@ -47,6 +50,20 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
     });
     closeDialog();
   };
+  const handleGetLatestSignature = () => {
+    const latestSignature = findNearestSignature(
+      dailyLogs,
+      selectedDay.toFormat("yyyy/MM/dd"),
+    );
+
+    if (!latestSignature) {
+      toast.error("No signature found.");
+      return;
+    }
+
+    setSignature(latestSignature);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="border-b pb-4">
@@ -71,19 +88,17 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
       </div>
       <div className="flex flex-col gap-2">
         <Label>Trailers</Label>
-        <TagInput
+        <FormInput
           value={trailers}
           onChange={setTrailers}
-          type="trailer"
           placeholder="Add trailers..."
         />
       </div>
       <div className="flex flex-col gap-2">
         <Label>Shipping Documents</Label>
-        <TagInput
+        <FormInput
           value={shippingDocs}
           onChange={setShippingDocs}
-          type="shipping-doc"
           placeholder="Add shipping documents..."
         />
       </div>
@@ -111,6 +126,13 @@ export const ShippingForm = ({ selectedDay, closeDialog }) => {
           )}
         </div>
       </div>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={handleGetLatestSignature}
+      >
+        <FaFileSignature /> Get signature
+      </Button>
 
       <Button className="cursor-pointer" onClick={onSubmit}>
         Save

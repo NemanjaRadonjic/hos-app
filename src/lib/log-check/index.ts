@@ -330,32 +330,32 @@ export function buildLogCheck({
       }
     }
 
-    // NO ODO CHANGE WHILE YES LOCATION CHANGE
-    if ((isMovement || isStop) && prevEvent) {
-      const prevLocation = prevEvent.location?.calculatedLocation;
-      const currentLocation = event.location?.calculatedLocation;
+    // // NO ODO CHANGE WHILE YES LOCATION CHANGE
+    // if ((isMovement || isStop) && prevEvent) {
+    //   const prevLocation = prevEvent.location?.calculatedLocation;
+    //   const currentLocation = event.location?.calculatedLocation;
 
-      const locationChanged =
-        prevLocation != null &&
-        currentLocation != null &&
-        prevLocation !== currentLocation;
+    //   const locationChanged =
+    //     prevLocation != null &&
+    //     currentLocation != null &&
+    //     prevLocation !== currentLocation;
 
-      const miles =
-        event.totalVehicleMiles != null && prevEvent.totalVehicleMiles != null
-          ? event.totalVehicleMiles - prevEvent.totalVehicleMiles
-          : null;
+    //   const miles =
+    //     event.totalVehicleMiles != null && prevEvent.totalVehicleMiles != null
+    //       ? event.totalVehicleMiles - prevEvent.totalVehicleMiles
+    //       : null;
 
-      if (locationChanged && miles === 0) {
-        issues.push({
-          group: "Odometer",
-          code: "LOCATION_CHANGED_WITHOUT_ODOMETER_CHANGE",
-          eventId: event._id,
-          logDate: event.eventTime.logDate.date,
-          severity: "error",
-          message: "Location changed without odometer change.",
-        });
-      }
-    }
+    //   if (locationChanged && miles === 0) {
+    //     issues.push({
+    //       group: "Odometer",
+    //       code: "LOCATION_CHANGED_WITHOUT_ODOMETER_CHANGE",
+    //       eventId: event._id,
+    //       logDate: event.eventTime.logDate.date,
+    //       severity: "error",
+    //       message: "Location changed without odometer change.",
+    //     });
+    //   }
+    // }
 
     // EH
     if (

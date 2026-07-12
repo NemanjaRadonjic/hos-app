@@ -6,29 +6,29 @@ type ClipboardState = {
   location?: HosEvent["location"];
   odometer?: number;
   engineHours?: number;
+  eld?: HosEvent["eld"];
+  vehicle?: HosEvent["vehicle"];
 };
 
 type ClipboardStore = {
   data: ClipboardState;
 
   copyLocation: (location: HosEvent["location"]) => void;
-  getLocation: () => HosEvent["location"] | undefined;
-  canPasteLocation: () => boolean;
 
   copyOdometer: (value: number) => void;
-  getOdometer: () => number | undefined;
-  canPasteOdometer: () => boolean;
 
   copyEngineHours: (value: number) => void;
-  getEngineHours: () => number | undefined;
-  canPasteEngineHours: () => boolean;
+
+  copyEld: (eld: HosEvent["eld"]) => void;
+
+  copyVehicle: (vehicle: HosEvent["vehicle"]) => void;
 
   clear: () => void;
 };
 
 export const useAppClipboardStore = create<ClipboardStore>()(
   devtools(
-    (set, get) => ({
+    (set) => ({
       data: {},
 
       copyLocation(location) {
@@ -42,14 +42,6 @@ export const useAppClipboardStore = create<ClipboardStore>()(
         }));
       },
 
-      getLocation() {
-        return get().data.location;
-      },
-
-      canPasteLocation() {
-        return !!get().data.location;
-      },
-
       copyOdometer(value) {
         set((state) => ({
           data: {
@@ -57,14 +49,6 @@ export const useAppClipboardStore = create<ClipboardStore>()(
             odometer: value,
           },
         }));
-      },
-
-      getOdometer() {
-        return get().data.odometer;
-      },
-
-      canPasteOdometer() {
-        return get().data.odometer != null;
       },
 
       copyEngineHours(value) {
@@ -76,12 +60,26 @@ export const useAppClipboardStore = create<ClipboardStore>()(
         }));
       },
 
-      getEngineHours() {
-        return get().data.engineHours;
+      copyEld(eld) {
+        if (!eld) return;
+
+        set((state) => ({
+          data: {
+            ...state.data,
+            eld,
+          },
+        }));
       },
 
-      canPasteEngineHours() {
-        return get().data.engineHours != null;
+      copyVehicle(vehicle) {
+        if (!vehicle) return;
+
+        set((state) => ({
+          data: {
+            ...state.data,
+            vehicle,
+          },
+        }));
       },
 
       clear() {
