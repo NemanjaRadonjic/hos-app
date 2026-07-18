@@ -5,7 +5,7 @@ import { Clock } from "lucide-react";
 import { msToHoursMinutes } from "@/lib/hos/helpers";
 import { useTransactionContext } from "@/lib/hooks/TransactionContext";
 import { getTokenPayload } from "@/lib/helpers";
-import { CommitDialog } from "./commit-dialog";
+import { TransactionDialog } from "./transaction-dialog";
 import { BiCertification, BiSolidTrashAlt } from "react-icons/bi";
 import { FaCertificate } from "react-icons/fa6";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
@@ -24,7 +24,7 @@ type ControlBarProps = {
   diagnostics: LogDiagnosticsState;
 };
 
-type CommitPhase = "confirm" | "saving" | "success" | "error";
+type CommitPhase = "confirm" | "creating" | "saving" | "success" | "error";
 
 export default function ControlBar({
   updateEventsTimestamp,
@@ -41,7 +41,7 @@ export default function ControlBar({
     reset,
     status,
     deleteEvents,
-    getTransactionDetails,
+    transactionDetails,
     fixCert,
     fixInt,
     fixSeqIds,
@@ -59,8 +59,6 @@ export default function ControlBar({
     failed: 0,
     waiting: null,
   });
-
-  const transactionDetails = getTransactionDetails();
 
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
@@ -210,15 +208,14 @@ export default function ControlBar({
           Finish
         </Button>
       </div>
-      <CommitDialog
+      <TransactionDialog
+        action="commit"
         open={commitOpen}
         onOpenChange={setCommitOpen}
         phase={commitPhase}
         transactionDetails={transactionDetails}
         progress={commitProgress}
         onConfirm={async () => {
-          setCommitPhase("saving");
-
           setCommitProgress({
             done: 0,
             total: transactionDetails.totalRequests,
@@ -227,14 +224,16 @@ export default function ControlBar({
             waiting: null,
           });
 
-          const result = await commit(setCommitProgress);
+          try {
+            const result = await commit({
+              onPhaseChange: setCommitPhase,
+              onProgress: setCommitProgress,
+            });
 
-          if (!result) {
+            setCommitPhase(result.failed.length > 0 ? "error" : "success");
+          } catch {
             setCommitPhase("error");
-            return;
           }
-
-          setCommitPhase(result.failed.length > 0 ? "error" : "success");
         }}
         diagnostics={diagnostics}
         handleIssueClick={handleIssueClick}

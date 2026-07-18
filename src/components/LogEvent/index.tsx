@@ -92,14 +92,6 @@ const LogEvent = ({
 }: LogEventProps) => {
   const { duplicateEvent, deleteEvents, updateEvent } = useTransactionContext();
   const tz = event.eventTime.logDate.timeZone.id;
-  const {
-    copyOdometer,
-    getOdometer,
-    canPasteOdometer,
-    copyEngineHours,
-    getEngineHours,
-    canPasteEngineHours,
-  } = useAppClipboardStore((state) => state);
 
   const icons = getNoteIcons(event.eventComment);
   const badgeIcons = [

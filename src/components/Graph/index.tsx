@@ -41,7 +41,7 @@ const ICON_MAP: Record<string, IconType> = {
   DR_LOGOUT: BiLogOut,
 };
 
-const getIcon = (eventCode: string): IconType | null => {
+export const getIcon = (eventCode: string): IconType | null => {
   if (eventCode.startsWith("DR_CERT")) return BiSolidCertification;
   if (eventCode.startsWith("ENG_UP")) return TbEngine;
   if (eventCode.startsWith("ENG_DOWN")) return TbEngineOff;
@@ -49,7 +49,7 @@ const getIcon = (eventCode: string): IconType | null => {
   return ICON_MAP[eventCode] ?? null;
 };
 
-const getIconColor = (eventCode: string) => {
+export const getIconColor = (eventCode: string) => {
   if (eventCode.startsWith("DR_CERT")) {
     return eventCode === "DR_CERT_1" ? "#1b18be" : "#808080";
   }
@@ -96,9 +96,9 @@ const GRAPH_SIZES = (() => {
   };
 })();
 
-const STOP_CODES = new Set(["DS_OFF", "DS_ON", "DS_SB"]);
+export const STOP_CODES = new Set(["DS_OFF", "DS_ON", "DS_SB"]);
 
-function minutesToX(minutes: number) {
+export function minutesToX(minutes: number) {
   return GRAPH_SIZES.paddingLeft + (minutes / 1440) * GRAPH_SIZES.graphWidth;
 }
 
@@ -565,6 +565,18 @@ export default function ELDGraph({
         <canvas
           ref={canvasRef}
           onClick={handleCanvasClick}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+
+            mouseX.current =
+              (e.clientX - rect.left) * (GRAPH_SIZES.canvasWidth / rect.width);
+
+            requestAnimationFrame(draw);
+          }}
+          onMouseLeave={() => {
+            mouseX.current = null;
+            requestAnimationFrame(draw);
+          }}
           onMouseDown={(e) => {
             didDrag.current = false;
 

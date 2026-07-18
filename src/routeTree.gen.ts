@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TransactionsIndexRouteImport } from './routes/transactions/index'
 import { Route as DriversIndexRouteImport } from './routes/drivers/index'
+import { Route as TransactionsTransactionIdRouteImport } from './routes/transactions/$transactionId'
 import { Route as DriversDriverIdRouteImport } from './routes/drivers/$driverId'
 
 const LoginRoute = LoginRouteImport.update({
@@ -24,11 +26,22 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransactionsIndexRoute = TransactionsIndexRouteImport.update({
+  id: '/transactions/',
+  path: '/transactions/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DriversIndexRoute = DriversIndexRouteImport.update({
   id: '/drivers/',
   path: '/drivers/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransactionsTransactionIdRoute =
+  TransactionsTransactionIdRouteImport.update({
+    id: '/transactions/$transactionId',
+    path: '/transactions/$transactionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DriversDriverIdRoute = DriversDriverIdRouteImport.update({
   id: '/drivers/$driverId',
   path: '/drivers/$driverId',
@@ -39,34 +52,61 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
+  '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
   '/drivers/': typeof DriversIndexRoute
+  '/transactions/': typeof TransactionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
+  '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
   '/drivers': typeof DriversIndexRoute
+  '/transactions': typeof TransactionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
+  '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
   '/drivers/': typeof DriversIndexRoute
+  '/transactions/': typeof TransactionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/drivers/$driverId' | '/drivers/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/drivers/$driverId'
+    | '/transactions/$transactionId'
+    | '/drivers/'
+    | '/transactions/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/drivers/$driverId' | '/drivers'
-  id: '__root__' | '/' | '/login' | '/drivers/$driverId' | '/drivers/'
+  to:
+    | '/'
+    | '/login'
+    | '/drivers/$driverId'
+    | '/transactions/$transactionId'
+    | '/drivers'
+    | '/transactions'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/drivers/$driverId'
+    | '/transactions/$transactionId'
+    | '/drivers/'
+    | '/transactions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   DriversDriverIdRoute: typeof DriversDriverIdRoute
+  TransactionsTransactionIdRoute: typeof TransactionsTransactionIdRoute
   DriversIndexRoute: typeof DriversIndexRoute
+  TransactionsIndexRoute: typeof TransactionsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -85,11 +125,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/transactions/': {
+      id: '/transactions/'
+      path: '/transactions'
+      fullPath: '/transactions/'
+      preLoaderRoute: typeof TransactionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/drivers/': {
       id: '/drivers/'
       path: '/drivers'
       fullPath: '/drivers/'
       preLoaderRoute: typeof DriversIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transactions/$transactionId': {
+      id: '/transactions/$transactionId'
+      path: '/transactions/$transactionId'
+      fullPath: '/transactions/$transactionId'
+      preLoaderRoute: typeof TransactionsTransactionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/drivers/$driverId': {
@@ -106,7 +160,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   DriversDriverIdRoute: DriversDriverIdRoute,
+  TransactionsTransactionIdRoute: TransactionsTransactionIdRoute,
   DriversIndexRoute: DriversIndexRoute,
+  TransactionsIndexRoute: TransactionsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

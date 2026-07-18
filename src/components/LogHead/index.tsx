@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import type { HosTimers, Violation } from "@/lib/hos/calculations-old";
 
 import CycleList from "./cycles-list";
@@ -25,7 +25,7 @@ import {
   PopoverTrigger,
 } from "../ui/popover";
 import { Button } from "../ui/button";
-import { SpaceIcon } from "lucide-react";
+import { Home, SpaceIcon } from "lucide-react";
 import type { ProviderViolation, Vehicle } from "@/lib/types";
 import type { LogDiagnosticsState } from "@/lib/hos/build-log-diagnostics";
 import { FaTruckFront } from "react-icons/fa6";
@@ -69,6 +69,12 @@ const LogHead = ({
 
   return (
     <section className="flex w-full items-center gap-4 px-6 py-2 shadow-sm">
+      <Link
+        to="/"
+        className="text-muted-foreground hover:bg-muted flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:text-black"
+      >
+        <Home className="size-4" />
+      </Link>
       <div className="space-y-2">
         <DatePicker setSelectedDay={setSelectedDay} value={value} />
       </div>

@@ -1,12 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import type {
-  HosEvent,
-  DailyLog,
-  DailyLogSummary,
-  DailyLogForm,
-} from "../types";
+import type { HosEvent, DailyLog, DailyLogForm, Company } from "../types";
 import {
   CHUNK_DAYS,
   flattenDailyLogsData,
@@ -21,8 +16,10 @@ import {
 } from "../hos/helpers";
 import { useDriverData } from "./useDriverData";
 import {
+  createTransaction,
   deleteHosEvent,
   generateInterlocations,
+  updateTransaction,
   upsertDailyLog,
   upsertDailyLogSummary,
   upsertHosEvent,
@@ -35,17 +32,75 @@ import { isDayCertified } from "./helpers/check-date-certified";
 import { runQueue, type QueueItem } from "../helpers/api-helpers";
 import { buildInterlocations } from "./helpers/build-interlocations";
 import { getCalculatedLocationData } from "../helpers/get-calculated-location";
+import type { DriverSimplified } from "./useDriversData";
+import type { ExecutionPhase } from "@/components/transaction-dialog";
 
 type TransactionStatus = "idle" | "pending" | "saving" | "error";
+
+export type ExecutionCallbacks = {
+  onPhaseChange?: (phase: "creating" | "saving" | "finalizing") => void;
+  onProgress?: (progress: CommitProgress) => void;
+};
 
 export type TransactionDetails = {
   from: string | null;
   to: string | null;
-  changedEvents: number;
+  updatedEvents: number;
+  addedEvents: number;
   changedLogs: number;
   deletedEvents: number;
   totalRequests: number;
 };
+
+export type TransactionPayload = {
+  eventChanges: EventChange[];
+  logChanges: DailyLogChange[];
+};
+
+export type TransactionEvent =
+  | EventChange
+  | {
+      eventId: string;
+      operation: null;
+      before: HosEvent;
+      after: null;
+    };
+
+export type DailyLogChange =
+  | {
+      logId: string;
+      logDate: string;
+      operation: "create";
+      before: null;
+      after: DailyLog;
+    }
+  | {
+      logId: string;
+      logDate: string;
+      operation: "update";
+      before: DailyLog;
+      after: DailyLog;
+    };
+
+export type EventChange =
+  | {
+      eventId: string;
+      operation: "create";
+      before: null;
+      after: HosEvent;
+    }
+  | {
+      eventId: string;
+      operation: "update";
+      before: HosEvent;
+      after: HosEvent;
+    }
+  | {
+      eventId: string;
+      operation: "delete";
+      before: HosEvent;
+      after: null;
+    };
 
 const toArray = (input: HosEvent | HosEvent[]) =>
   Array.isArray(input) ? input : [input];
@@ -131,24 +186,50 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     };
   }, [status]);
 
+  const savePayload = useMemo<TransactionPayload>(() => {
+    const originalEvents = data?.eventsData ?? [];
+    const originalLogs = data?.dailyLogsData ?? [];
+
+    const eventChanges = buildEventChanges({
+      originalEvents,
+      currentEvents: events,
+      deletedEventIds,
+    });
+
+    const logChanges = buildLogChanges({
+      originalLogs,
+      dailyLogEdits,
+      driver,
+      company,
+      selectedDay,
+    });
+
+    return {
+      eventChanges,
+      logChanges,
+    };
+  }, [
+    data,
+    events,
+    deletedEventIds,
+    dailyLogEdits,
+    driver,
+    company,
+    selectedDay,
+  ]);
+
   // handle status state directly from the diffing
   useEffect(() => {
-    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
-
     const isChanged =
-      changedEvents.length > 0 ||
-      changedLogs.length > 0 ||
-      deletedEventIds.length > 0;
+      savePayload.eventChanges.length > 0 || savePayload.logChanges.length > 0;
 
     const nextStatus = isChanged ? "pending" : "idle";
 
     setStatus((prev) => {
       if (prev === "error") return prev;
-      if (prev === nextStatus) return prev;
-
-      return nextStatus;
+      return prev === nextStatus ? prev : nextStatus;
     });
-  }, [userId, events, dailyLogEdits, data]);
+  }, [savePayload]);
 
   const getSummary = (date: string) =>
     data?.dailySummariesData.find((s) => s.logDate.date === date);
@@ -382,16 +463,65 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     });
   };
 
-  const commit = async (
-    onProgress?: (p: CommitProgress) => void,
-  ): Promise<CommitResult> => {
+  const commit = async ({
+    onPhaseChange,
+    onProgress,
+  }: ExecutionCallbacks): Promise<CommitResult> => {
     setStatus("saving");
 
-    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
+    const { eventChanges, logChanges } = savePayload;
+
+    const originalEvents = data?.eventsData ?? [];
+
+    const dates = new Set<string>();
+
+    for (const change of eventChanges) {
+      if (change.before) {
+        dates.add(change.before.eventTime.logDate.date);
+      }
+
+      if (change.after) {
+        dates.add(change.after.eventTime.logDate.date);
+      }
+    }
+
+    for (const change of logChanges) {
+      dates.add(change.logDate);
+    }
+
+    const sortedDates = [...dates].sort();
+
+    const fromDate = sortedDates[0] ?? null;
+    const toDate = sortedDates.at(-1) ?? null;
+
+    if (!fromDate || !toDate) {
+      throw new Error("Cannot create a transaction without an affected range.");
+    }
+
+    const transactionEvents = buildTransactionEvents({
+      originalEvents,
+      eventChanges,
+      fromDate,
+      toDate,
+    });
+
+    onPhaseChange?.("creating");
+
+    const transaction = await createTransaction({
+      driverId: driver.id,
+      fromDate,
+      toDate,
+      eventChanges,
+      logChanges,
+      transactionEvents,
+      maxTimeShiftMs: getMaxTimeShiftMs(eventChanges),
+    });
+
+    onPhaseChange?.("saving");
 
     const items: QueueItem[] = [];
-
-    for (const log of changedLogs) {
+    for (const change of logChanges) {
+      const log = change.after;
       const summaryId = log._id.replace("DailyLog:", "DailyLogSummary:");
 
       items.push({
@@ -421,20 +551,25 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       });
     }
 
-    for (const event of changedEvents) {
-      items.push({
-        id: event._id,
-        label: `Event ${event._id}`,
-        run: () => upsertHosEvent(event._id, event),
-      });
-    }
+    for (const change of eventChanges) {
+      switch (change.operation) {
+        case "create":
+        case "update":
+          items.push({
+            id: change.eventId,
+            label: `Event ${change.eventId}`,
+            run: () => upsertHosEvent(change.eventId, change.after),
+          });
+          break;
 
-    for (const id of deletedEventIds) {
-      items.push({
-        id,
-        label: `Delete ${id}`,
-        run: () => deleteHosEvent(id),
-      });
+        case "delete":
+          items.push({
+            id: change.eventId,
+            label: `Delete ${change.eventId}`,
+            run: () => deleteHosEvent(change.eventId),
+          });
+          break;
+      }
     }
 
     await runQueue({
@@ -451,6 +586,12 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
           waiting: p.waiting,
         });
       },
+    });
+
+    onPhaseChange?.("finalizing");
+
+    await updateTransaction(transaction.id, {
+      status: "success",
     });
 
     await queryClient.refetchQueries({
@@ -471,130 +612,51 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     };
   };
 
-  // diffs state with cache, because of json string comparison and me not ordering
-  // events properly yet, this will have some false changes that are basically the
-  // same events/logs
-  const getSavePayload = useCallback(() => {
-    const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
-      "driverData",
-      userId,
-    ]);
-
-    const originalEvents = cachedData?.pages.flatMap((p) => p.eventsData) ?? [];
-
-    const originalLogs =
-      cachedData?.pages.flatMap((p) => p.dailyLogsData) ?? [];
-
-    const originalMap = new Map(originalEvents.map((e) => [e._id, e]));
-
-    const changedEvents = events.filter((curr) => {
-      const orig = originalMap.get(curr._id);
-
-      const changed = JSON.stringify(orig) !== JSON.stringify(curr);
-
-      return changed;
-    });
-
-    const deletedEventIdsToSave = [...deletedEventIds].filter((id) =>
-      originalMap.has(id),
-    );
-
-    const changedLogs = Object.entries(dailyLogEdits)
-      .map(([id, editedLog]) => {
-        if (!driver || !company) return null;
-
-        const base =
-          originalLogs.find((log) => log._id === id) ??
-          buildDailyLog({
-            dailyLogId: id,
-            driver,
-            selectedDay,
-            company,
-          });
-
-        const changed = JSON.stringify(base) !== JSON.stringify(editedLog);
-
-        return changed ? editedLog : null;
-      })
-      .filter((log): log is DailyLog => log != null);
-
-    return {
-      changedEvents,
-      deletedEventIds: deletedEventIdsToSave,
-      changedLogs,
-    };
-  }, [
-    queryClient,
-    userId,
-    events,
-    dailyLogEdits,
-    deletedEventIds,
-    driver,
-    company,
-    selectedDay,
-  ]);
-
-  // temp log
-  // const savePayload = getSavePayload();
-  // console.log({ savePayload });
-
-  const getTransactionDetails = (): TransactionDetails => {
-    const { changedEvents, changedLogs, deletedEventIds } = getSavePayload();
-
-    const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
-      "driverData",
-      userId,
-    ]);
-
-    const originalEvents =
-      cachedData?.pages.flatMap((page) => page.eventsData) ?? [];
-
-    const originalMap = new Map(
-      originalEvents.map((event) => [event._id, event]),
-    );
-
+  const transactionDetails = useMemo<TransactionDetails>(() => {
+    const { eventChanges, logChanges } = savePayload;
+    console.log({ eventChanges, logChanges });
     const dates = new Set<string>();
 
-    // New / updated event dates
-    for (const event of changedEvents) {
-      dates.add(event.eventTime.logDate.date);
+    for (const change of eventChanges) {
+      if (change.before) {
+        dates.add(change.before.eventTime.logDate.date);
+      }
 
-      // Include original date in case the event moved to another day
-      const original = originalMap.get(event._id);
-
-      if (original) {
-        dates.add(original.eventTime.logDate.date);
+      if (change.after) {
+        dates.add(change.after.eventTime.logDate.date);
       }
     }
 
-    // Deleted event dates
-    for (const id of deletedEventIds) {
-      const original = originalMap.get(id);
-
-      if (original) {
-        dates.add(original.eventTime.logDate.date);
-      }
-    }
-
-    // Changed daily log dates
-    for (const log of changedLogs) {
-      dates.add(log.logDate.date);
+    for (const change of logChanges) {
+      dates.add(change.logDate);
     }
 
     const sortedDates = [...dates].sort();
+
+    const updatedEvents = eventChanges.filter(
+      (change) => change.operation === "update",
+    ).length;
+
+    const addedEvents = eventChanges.filter(
+      (change) => change.operation === "create",
+    ).length;
+
+    const deletedEvents = eventChanges.filter(
+      (change) => change.operation === "delete",
+    ).length;
 
     return {
       from: sortedDates[0] ?? null,
       to: sortedDates.at(-1) ?? null,
 
-      changedEvents: changedEvents.length,
-      changedLogs: changedLogs.length,
-      deletedEvents: deletedEventIds.length,
+      updatedEvents,
+      addedEvents,
+      deletedEvents,
+      changedLogs: logChanges.length,
 
-      totalRequests:
-        changedEvents.length + deletedEventIds.length + changedLogs.length * 2,
+      totalRequests: eventChanges.length + logChanges.length * 2,
     };
-  };
+  }, [savePayload]);
 
   const reset = () => {
     const cachedData = queryClient.getQueryData<InfiniteData<DailyLogsPage>>([
@@ -894,26 +956,32 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       ),
     );
 
-    if (isServerLockedEvent(recentEvents)) {
-      toast.error("Some events are locked");
-      return;
-    }
-
     if (recentEvents.length === 0) {
       toast.error("No events found in the last 8 days.");
       return;
     }
 
-    const vehicleIds = new Set(
-      recentEvents.map((event) => event.vehicle?.name ?? null),
-    );
+    const lastEvent = recentEvents.at(-1)!;
+    const currentVehicleId = lastEvent.vehicle?.name ?? null;
 
-    if (vehicleIds.size !== 1) {
-      toast.error("truck change");
-      return;
+    let segmentStartIndex = recentEvents.length - 1;
+
+    for (let i = recentEvents.length - 2; i >= 0; i--) {
+      const vehicleId = recentEvents[i].vehicle?.name ?? null;
+
+      if (vehicleId !== currentVehicleId) {
+        break;
+      }
+
+      segmentStartIndex = i;
     }
 
-    const lastEvent = recentEvents.at(-1)!;
+    const eventsToFix = recentEvents.slice(segmentStartIndex);
+
+    if (isServerLockedEvent(eventsToFix)) {
+      toast.error("Some events are locked.");
+      return;
+    }
 
     if (lastEvent.totalEngineHours == null) {
       toast.error("The last event is missing engine hours.");
@@ -921,22 +989,21 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     }
 
     const engineOnAfterEvent: boolean[] = [];
-
     let engineOn = true;
 
-    for (let i = 0; i < recentEvents.length; i++) {
-      const event = recentEvents[i];
+    for (let i = 0; i < eventsToFix.length; i++) {
+      const event = eventsToFix[i];
 
       if (event.eventCode.id === "ENG_UP_NORMAL") {
         engineOn = true;
       } else if (event.eventCode.id === "ENG_DOWN_NORMAL") {
         engineOn = false;
       }
+
       engineOnAfterEvent[i] = engineOn;
     }
 
     const fixedEngineHoursById = new Map<string, number>();
-
     const anchorEngineHours = lastEvent.totalEngineHours;
 
     fixedEngineHoursById.set(
@@ -946,9 +1013,9 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     let expectedHoursFromCurrentToLast = 0;
 
-    for (let i = recentEvents.length - 2; i >= 0; i--) {
-      const current = recentEvents[i];
-      const next = recentEvents[i + 1];
+    for (let i = eventsToFix.length - 2; i >= 0; i--) {
+      const current = eventsToFix[i];
+      const next = eventsToFix[i + 1];
 
       const elapsedHours =
         (next.eventTime.timestamp - current.eventTime.timestamp) / 3_600_000;
@@ -960,22 +1027,36 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
       const fixedEngineHours =
         anchorEngineHours - expectedHoursFromCurrentToLast;
 
+      if (fixedEngineHours < 0) {
+        toast.error(
+          "Engine hours cannot be fixed because some would be negative.",
+        );
+        return;
+      }
+
       fixedEngineHoursById.set(current._id, roundEngineHours(fixedEngineHours));
     }
 
     setEvents((prev) =>
       prev.map((event) => {
         const fixedEngineHours = fixedEngineHoursById.get(event._id);
+
         if (fixedEngineHours == null) {
           return event;
         }
+
         return {
           ...event,
           totalEngineHours: fixedEngineHours,
         };
       }),
     );
-    toast.success("Engine hours fixed successfully");
+
+    toast.success(
+      segmentStartIndex === 0
+        ? "Engine hours fixed successfully."
+        : "Engine hours fixed back to the most recent truck change.",
+    );
   };
 
   const dailyLogs = [
@@ -988,7 +1069,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
 
     getDailyLog,
     getSummary,
-    getTransactionDetails,
+    transactionDetails,
 
     events,
     lastKnownEvent: data?.lastKnownEvent,
@@ -1007,7 +1088,7 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     isFetchingMore,
 
     // transaction
-    getSavePayload,
+    // getSavePayload,
     reset,
     updateDailyLog,
     commit,
@@ -1018,6 +1099,214 @@ export const useTransaction = (userId: string, selectedDay: DateTime) => {
     fixSeqIds,
     fixEngineHours,
   };
+};
+
+const buildLogChanges = ({
+  originalLogs,
+  dailyLogEdits,
+  driver,
+  company,
+  selectedDay,
+}: {
+  originalLogs: DailyLog[];
+  dailyLogEdits: Record<string, DailyLog>;
+  driver?: DriverSimplified;
+  company?: Company;
+  selectedDay: DateTime;
+}): DailyLogChange[] => {
+  if (!driver || !company) return [];
+
+  const originalMap = new Map(originalLogs.map((log) => [log._id, log]));
+
+  return Object.entries(dailyLogEdits)
+    .map(([id, editedLog]): DailyLogChange | null => {
+      const original = originalMap.get(id);
+
+      if (original) {
+        if (deepEqual(original, editedLog)) {
+          return null;
+        }
+
+        return {
+          logId: id,
+          logDate: editedLog.logDate.date,
+          operation: "update",
+          before: original,
+          after: editedLog,
+        };
+      }
+
+      const base = buildDailyLog({
+        dailyLogId: id,
+        driver,
+        selectedDay,
+        company,
+      });
+
+      if (deepEqual(base, editedLog)) {
+        return null;
+      }
+
+      return {
+        logId: id,
+        logDate: editedLog.logDate.date,
+        operation: "create",
+        before: null,
+        after: editedLog,
+      };
+    })
+    .filter((change): change is DailyLogChange => change !== null);
+};
+
+const buildEventChanges = ({
+  originalEvents,
+  currentEvents,
+  deletedEventIds,
+}: {
+  originalEvents: HosEvent[];
+  currentEvents: HosEvent[];
+  deletedEventIds: Set<string>;
+}): EventChange[] => {
+  const originalMap = new Map(
+    originalEvents.map((event) => [event._id, event]),
+  );
+
+  const changes: EventChange[] = [];
+
+  for (const current of currentEvents) {
+    const original = originalMap.get(current._id);
+
+    if (!original) {
+      changes.push({
+        eventId: current._id,
+        operation: "create",
+        before: null,
+        after: current,
+      });
+
+      continue;
+    }
+
+    if (!deepEqual(original, current)) {
+      changes.push({
+        eventId: current._id,
+        operation: "update",
+        before: original,
+        after: current,
+      });
+    }
+  }
+
+  for (const id of deletedEventIds) {
+    const original = originalMap.get(id);
+
+    if (!original) continue;
+
+    changes.push({
+      eventId: id,
+      operation: "delete",
+      before: original,
+      after: null,
+    });
+  }
+
+  return changes;
+};
+
+export function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+
+  if (
+    typeof a !== "object" ||
+    a === null ||
+    typeof b !== "object" ||
+    b === null
+  ) {
+    return false;
+  }
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) {
+      return false;
+    }
+
+    if (a.length !== b.length) {
+      return false;
+    }
+
+    return a.every((value, index) => deepEqual(value, b[index]));
+  }
+
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+
+  return aKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      deepEqual(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+      ),
+  );
+}
+
+// goes to server
+export const buildTransactionEvents = ({
+  originalEvents,
+  eventChanges,
+  fromDate,
+  toDate,
+}: {
+  originalEvents: HosEvent[];
+  eventChanges: EventChange[];
+  fromDate: string;
+  toDate: string;
+}): TransactionEvent[] => {
+  const changedIds = new Set(eventChanges.map((change) => change.eventId));
+
+  const unchangedEvents: TransactionEvent[] = originalEvents
+    .filter((event) => {
+      const date = event.eventTime.logDate.date;
+
+      return date >= fromDate && date <= toDate && !changedIds.has(event._id);
+    })
+    .map((event) => ({
+      eventId: event._id,
+      operation: null,
+      before: event,
+      after: null,
+    }));
+
+  return [...unchangedEvents, ...eventChanges].sort((a, b) => {
+    const aTs =
+      a.after?.eventTime.timestamp ?? a.before?.eventTime.timestamp ?? 0;
+
+    const bTs =
+      b.after?.eventTime.timestamp ?? b.before?.eventTime.timestamp ?? 0;
+
+    return aTs - bTs;
+  });
+};
+
+const getMaxTimeShiftMs = (eventChanges: EventChange[]) => {
+  let maxShiftMs = 0;
+
+  for (const change of eventChanges) {
+    if (change.operation !== "update") continue;
+
+    const beforeTs = change.before.eventTime.timestamp;
+    const afterTs = change.after.eventTime.timestamp;
+
+    const shiftMs = Math.abs(afterTs - beforeTs);
+
+    maxShiftMs = Math.max(maxShiftMs, shiftMs);
+  }
+
+  return maxShiftMs;
 };
 
 const roundEngineHours = (value: number) =>

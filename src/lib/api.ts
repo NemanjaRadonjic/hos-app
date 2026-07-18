@@ -1,4 +1,9 @@
 import api from "./axios";
+import type {
+  DailyLogChange,
+  EventChange,
+  TransactionEvent,
+} from "./hooks/useTransaction";
 import { supabase } from "./supabase";
 import type { DailyLog, DailyLogSummary, HosEvent } from "./types";
 
@@ -188,6 +193,128 @@ export const generateInterlocations = async ({
     console.error(error);
     return null;
   }
+
+  return data;
+};
+
+export const createTransaction = async ({
+  driverId,
+  fromDate,
+  toDate,
+  eventChanges,
+  logChanges,
+  transactionEvents,
+  maxTimeShiftMs,
+}: {
+  driverId: string;
+  fromDate: string;
+  toDate: string;
+  eventChanges: EventChange[];
+  logChanges: DailyLogChange[];
+  transactionEvents: TransactionEvent[];
+  maxTimeShiftMs: number;
+}) => {
+  const addedEventCount = eventChanges.filter(
+    (change) => change.operation === "create",
+  ).length;
+
+  const updatedEventCount = eventChanges.filter(
+    (change) => change.operation === "update",
+  ).length;
+
+  const deletedEventCount = eventChanges.filter(
+    (change) => change.operation === "delete",
+  ).length;
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .insert({
+      driver_id: driverId,
+
+      from_date: fromDate.replaceAll("/", "-"),
+      to_date: toDate.replaceAll("/", "-"),
+
+      event_change_count: eventChanges.length,
+      log_change_count: logChanges.length,
+
+      added_event_count: addedEventCount,
+      updated_event_count: updatedEventCount,
+      deleted_event_count: deletedEventCount,
+
+      max_time_shift_ms: maxTimeShiftMs,
+
+      transaction_events: transactionEvents,
+      log_changes: logChanges,
+
+      status: "pending",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+export const updateTransaction = async (
+  id: string,
+  updates: {
+    status?: "pending" | "success" | "partial_failure" | "failed";
+  },
+) => {
+  const { error } = await supabase
+    .from("transactions")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) throw error;
+};
+
+type GetTransactionsOptions = {
+  pageIndex: number;
+  pageSize: number;
+  driverId?: string;
+};
+
+export async function getTransactions({
+  pageIndex,
+  pageSize,
+  driverId,
+}: GetTransactionsOptions) {
+  const from = pageIndex * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase.from("transactions").select("*", { count: "exact" });
+
+  if (driverId) {
+    query = query.eq("driver_id", driverId);
+  }
+
+  const { data, count, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    transactions: data ?? [],
+    rowCount: count ?? 0,
+  };
+}
+
+export const getTransaction = async (id: string) => {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
 
   return data;
 };

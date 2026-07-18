@@ -1,11 +1,48 @@
-import { TimezoneBar } from "./tz-bar";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import {
+  NavigationMenu,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+} from "@/components/ui/navigation-menu";
 
-const Navbar = () => {
+export default function Navbar() {
   return (
-    <div className="flex justify-center gap-2 py-2 shadow-sm">
-      <TimezoneBar />
-    </div>
-  );
-};
+    <header className="border-b">
+      <div className="container mx-auto flex h-14 items-center justify-between px-4">
+        <Link to="/" className="text-lg font-semibold tracking-tight">
+          Home
+        </Link>
 
-export default Navbar;
+        <NavigationMenu>
+          <NavigationMenuList>
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link
+                  to="/drivers"
+                  activeProps={{ className: "font-semibold" }}
+                >
+                  Drivers
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link
+                  to="/transactions"
+                  activeProps={{ className: "font-semibold bg-muted" }}
+                >
+                  Transactions
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          </NavigationMenuList>
+        </NavigationMenu>
+
+        <Button variant="outline">Settings</Button>
+      </div>
+    </header>
+  );
+}

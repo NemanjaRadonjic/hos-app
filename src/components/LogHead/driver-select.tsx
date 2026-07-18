@@ -23,12 +23,14 @@ import { toast } from "sonner";
 type DriverSelectProps = {
   driverId: string;
   co?: boolean;
+  nullable: boolean;
   onSelect?: (id: string) => void;
 };
 
 const DriverSelect = ({
   driverId,
   co = false,
+  nullable = false,
   onSelect,
 }: DriverSelectProps) => {
   const { drivers, isLoading: isDriversLoading } = useDriversData();
@@ -48,8 +50,8 @@ const DriverSelect = ({
 
               if (driver?.name) {
                 navigator.clipboard.writeText(driver.name);
+                toast.success("Driver name copied.");
               }
-              toast.success("Driver name copied.");
             }}
           >
             <div className="flex flex-1 items-center">
@@ -131,7 +133,7 @@ const DriverSelect = ({
           </PopoverContent>
         </PopoverPortal>
       </Popover>
-      {co && driverId && (
+      {driverId && (co || nullable) && (
         <Button variant="ghost" size="icon" onClick={() => onSelect?.(null)}>
           <MdClear className="h-4 w-4" />
         </Button>
