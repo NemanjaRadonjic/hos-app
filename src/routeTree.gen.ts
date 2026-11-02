@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TransactionsIndexRouteImport } from './routes/transactions/index'
 import { Route as DriversIndexRouteImport } from './routes/drivers/index'
+import { Route as CertificationsIndexRouteImport } from './routes/certifications/index'
 import { Route as TransactionsTransactionIdRouteImport } from './routes/transactions/$transactionId'
 import { Route as DriversDriverIdRouteImport } from './routes/drivers/$driverId'
 
@@ -36,6 +37,11 @@ const DriversIndexRoute = DriversIndexRouteImport.update({
   path: '/drivers/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CertificationsIndexRoute = CertificationsIndexRouteImport.update({
+  id: '/certifications/',
+  path: '/certifications/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TransactionsTransactionIdRoute =
   TransactionsTransactionIdRouteImport.update({
     id: '/transactions/$transactionId',
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
   '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
+  '/certifications/': typeof CertificationsIndexRoute
   '/drivers/': typeof DriversIndexRoute
   '/transactions/': typeof TransactionsIndexRoute
 }
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
   '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
+  '/certifications': typeof CertificationsIndexRoute
   '/drivers': typeof DriversIndexRoute
   '/transactions': typeof TransactionsIndexRoute
 }
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/drivers/$driverId': typeof DriversDriverIdRoute
   '/transactions/$transactionId': typeof TransactionsTransactionIdRoute
+  '/certifications/': typeof CertificationsIndexRoute
   '/drivers/': typeof DriversIndexRoute
   '/transactions/': typeof TransactionsIndexRoute
 }
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/drivers/$driverId'
     | '/transactions/$transactionId'
+    | '/certifications/'
     | '/drivers/'
     | '/transactions/'
   fileRoutesByTo: FileRoutesByTo
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/drivers/$driverId'
     | '/transactions/$transactionId'
+    | '/certifications'
     | '/drivers'
     | '/transactions'
   id:
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/drivers/$driverId'
     | '/transactions/$transactionId'
+    | '/certifications/'
     | '/drivers/'
     | '/transactions/'
   fileRoutesById: FileRoutesById
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   DriversDriverIdRoute: typeof DriversDriverIdRoute
   TransactionsTransactionIdRoute: typeof TransactionsTransactionIdRoute
+  CertificationsIndexRoute: typeof CertificationsIndexRoute
   DriversIndexRoute: typeof DriversIndexRoute
   TransactionsIndexRoute: typeof TransactionsIndexRoute
 }
@@ -139,6 +152,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriversIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/certifications/': {
+      id: '/certifications/'
+      path: '/certifications'
+      fullPath: '/certifications/'
+      preLoaderRoute: typeof CertificationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/transactions/$transactionId': {
       id: '/transactions/$transactionId'
       path: '/transactions/$transactionId'
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   DriversDriverIdRoute: DriversDriverIdRoute,
   TransactionsTransactionIdRoute: TransactionsTransactionIdRoute,
+  CertificationsIndexRoute: CertificationsIndexRoute,
   DriversIndexRoute: DriversIndexRoute,
   TransactionsIndexRoute: TransactionsIndexRoute,
 }

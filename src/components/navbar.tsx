@@ -38,10 +38,19 @@ export default function Navbar() {
                 </Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link
+                  to="/certifications"
+                  activeProps={{ className: "font-semibold bg-muted" }}
+                >
+                  Certifications
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
-
-        <Button variant="outline">Settings</Button>
       </div>
     </header>
   );

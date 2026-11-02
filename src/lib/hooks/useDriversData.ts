@@ -86,7 +86,7 @@ export const useDriversData = (): UseDriversDataResult => {
           status: status.hosEvent.eventCode.id,
           location: status.location,
           phone: driver.phoneNum,
-          updatedAt: status.updatedAt,
+          updatedAt: status.updatedAt ?? driver.updatedAt, // relying on status purely seems to have some issues on some drivers
           driveTime: status.driveTime,
           shiftTime: status.shiftTime,
           breakTime: status.breakTime,

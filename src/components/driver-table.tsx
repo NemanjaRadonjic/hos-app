@@ -186,14 +186,20 @@ const columns: ColumnDef<DriverSimplified>[] = [
   {
     header: "Updated",
     accessorFn: (row) => row.updatedAt,
-    cell: ({ row }) => (
-      <div className="text-xs">
-        {DateTime.fromMillis(row.original.updatedAt)
-          .setZone("America/Chicago")
-          .toRelative()}{" "}
-        - {formatTimestampEvent(row.original.updatedAt)}
-      </div>
-    ),
+    cell: ({ row }) => {
+      if (row.original.name === "Stephen Strawbridge") {
+        console.log(row);
+      }
+      return (
+        <div className="text-xs">
+          {row.original.updatedAt
+            ? `${DateTime.fromMillis(row.original.updatedAt)
+                .setZone("America/Chicago")
+                .toRelative()} - ${formatTimestampEvent(row.original.updatedAt)}`
+            : "Unknown"}
+        </div>
+      );
+    },
   },
 ];
 
